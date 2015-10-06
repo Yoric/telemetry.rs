@@ -2,10 +2,102 @@ use std::marker::PhantomData;
 use std::collections::HashMap;
 use std::rc::Rc;
 
+extern crate rustc_serialize;
+use rustc_serialize::json::Json;
+
+//
+// Telemetry is a mechanism used to capture metrics in an application,
+// and either store the data locally or upload to a server for
+// statistical analysis.
+//
+// Examples of usage:
+// - capturing the speed of an operation;
+// - finding out if users are actually using a feature;
+// - finding out how the duration of a session;
+// - determine the operating system on which the application is executed;
+// - determining the configuration of the application;
+// - capturing the operations that slow down the application;
+// - determining the amount of I/O performed by the application;
+// - ...
+//
+// The abstraction used by this library is the Histogram. Each
+// Histogram serves to capture a specific measurement, store it
+// locally and/or upload it to the server. Several types of Histograms
+// are provided, suited to distinct kinds of measures.
+//
+
+#[allow(dead_code)]
+#[allow(unused_variables)]
+impl Telemetry {
+    // Instantiate telemetry for a given product version.
+    pub fn new(version: String, _: Option<StorageSettings>, _: Option<ServerSettings>) -> Telemetry {
+        unreachable!() // TODO
+    }
+
+    //
+    // If an histogram is active, record a new value to the histogram.
+    // Otherwise, do nothing. For a histogram to be active, the
+    // following conditions must be met:
+    // - Telemetry must be active;
+    // - the histogram must not have been deactivated with `set_active_histogram`
+    // - the histogram must not have expired.
+    //
+    pub fn record<T, F>(&mut self, histogram: &mut Histogram<T>, closure: F) where F: FnOnce() -> Option<T>{
+        if !self.is_active {
+            return;
+        }
+        // FIXME: Handle other cases in which the histogram may be deactivated.
+        match closure() {
+            Some(x) => histogram.record(x),
+            None => {}
+        }
+    }
+    pub fn record_keyed<K, H, T>(&mut self, _: &KeyedHistogram<K, H, T>, _: &FnOnce() -> Option<(K, T)>) {
+        unreachable!() // TODO
+    }
+
+    // Activate or deactivate Telemetry. If Telemetry is deactivated,
+    // calling `record`/`record_keyed` will have no effect.
+    pub fn set_active(&mut self, value: bool) {
+        self.is_active = value
+    }
+    pub fn is_active(&self) -> bool {
+        self.is_active
+    }
+
+    // Activate or dactivate individual histograms. Ignored if Telemetry
+    // is deactivated or if the histogram has expired.
+    pub fn set_histogram_active<T>(&mut self, _: Histogram<T>, _: bool) {
+        unreachable!() // TODO
+    }
+    pub fn is_histogram_active<T>(&self, _: Histogram<T>) -> bool {
+        unreachable!() // TODO
+    }
+
+    // Export the list of histograms to a json document that may be
+    // uploaded to a Telemetry server. This list does not contain the
+    // values, only the metadata needed by the server to make sense of
+    // data that has been uploaded.
+    pub fn export_histograms(&self) -> Json {
+        unreachable!() // TODO
+    }
+
+    // Called automatically by histogram constructors.
+    fn register_flat(&mut self, meta: Metadata, histogram: Rc<HistogramBase>) {
+        let previous = self.flat_histograms.insert(meta.name, histogram);
+        assert!(previous.is_none());
+    }
+    fn register_keyed(&mut self, meta: Metadata, histogram: Rc<KeyedHistogramBase>) {
+        let previous = self.keyed_histograms.insert(meta.name, histogram);
+        assert!(previous.is_none());
+    }
+}
+
+
+
 // Metadata for an histogram.
 #[allow(dead_code)]
 struct Metadata {
-
     // The name of the histogram. Must be unique in the application.
     name: String,
 
@@ -13,7 +105,8 @@ struct Metadata {
     // are handled by the server component.
     alerts: Vec<String>,
 
-    // A human-readable description for the histogram.
+    // A human-readable description for the histogram. Don't forget to
+    // include labels and units, if your measurement has any.
     description: String,
 
     // If provided, stop recording after a given version of the
@@ -24,7 +117,8 @@ struct Metadata {
 trait HistogramBase {
     // FIXME: In the future, this trait will know about
     // (de)serializing both the content of an histogram
-    // and its metadata.
+    // and its metadata, as well as how to (de)activate
+    // the histogram.
 }
 trait Histogram<T> : HistogramBase {
     fn record(&mut self, T);
@@ -70,9 +164,7 @@ impl Flag {
 
 impl Histogram<()> for Flag {
     fn record(&mut self, _: ()) {
-        self.encountered = true;
-        // FIXME: Store data.
-        unreachable!()
+        self.encountered = true
     }
 }
 
@@ -84,7 +176,9 @@ impl HistogramBase for Flag {
 // browsing session, e.g. if a histogram is measuring user choices in
 // a dialog box with options "Yes" or "No", a new boolean value is
 // added every time the dialog is displayed.
-pub struct Boolean; // FIXME: Define.
+pub struct Boolean {
+    value: bool
+}
 
 #[allow(dead_code)]
 impl Boolean {
@@ -96,8 +190,8 @@ impl Boolean {
 }
 
 impl Histogram<bool> for Boolean {
-    fn record(&mut self, _: bool) {
-        unreachable!() // TODO
+    fn record(&mut self, value: bool) {
+        self.value = value
     }
 }
 
@@ -107,7 +201,9 @@ impl HistogramBase for Boolean {
 // This histogram type is used when you want to record a count of
 // something. It only stores a single value and it can only be
 // incremented by one with each add/accumulate call.
-pub struct Count; // TODO
+pub struct Count {
+    value: u32
+}
 
 #[allow(dead_code)]
 impl Count {
@@ -120,7 +216,7 @@ impl Count {
 
 impl Histogram<()> for Count {
     fn record(&mut self, _: ()) {
-        unreachable!() // TODO
+        self.value += 1
     }
 }
 
@@ -138,31 +234,29 @@ impl HistogramBase for Count {
 // types. Whenever the browser started an SSL handshake, it would
 // record one of a limited number of enum values which uniquely
 // identifies the handshake type.
-pub struct Enumerated<T> where T: AsU32<T> { // TODO
-    placeholder: PhantomData<T>
+pub struct Enumerated<T> where T: AsSize<T> { // TODO
+    phantom: PhantomData<T>,
+    values: Vec<u32>
 }
 
 #[allow(dead_code)]
-impl<T> Enumerated<T> where T: AsU32<T> {
-    fn new(_: Metadata, max_value: u32) -> Enumerated<T> {
+impl<T> Enumerated<T> where T: AsSize<T> {
+    fn new(_: Metadata, max_value: usize) -> Enumerated<T> {
         unreachable!() // TODO
     }
 }
 
 // A type (typically, an enumeration) that can be represented as a
 // number.
-pub trait AsU32<T> {
-    fn as_u32(T) -> u32 {
-        unreachable!() // TODO
-    }
-    fn from_u32(u32) -> Option<T> {
-        unreachable!() // TODO
-    }
+pub trait AsSize<T> {
+    fn as_usize(T) -> usize;
+    fn from_usize(usize) -> Option<T>;
 }
 
-impl<T: AsU32<T>> Histogram<T> for Enumerated<T> {
-    fn record(&mut self, _: T) {
-        unreachable!() // TODO
+impl<T: AsSize<T>> Histogram<T> for Enumerated<T> {
+    fn record(&mut self, value: T) {
+        let index = T::as_usize(value);
+        self.values[index] += 1
     }
 }
 
@@ -170,12 +264,12 @@ impl<T> HistogramBase for Enumerated<T> {
 }
 
 #[allow(dead_code)]
-impl AsU32<u32> {
-    fn as_u32(value: u32) -> u32 {
-        value
+impl AsSize<u32> {
+    fn as_usize(value: u32) -> usize {
+        value as usize
     }
-    fn from_u32(value: u32) -> Option<u32> {
-        Some(value)
+    fn from_usize(value: usize) -> Option<u32> {
+        Some(value as u32)
     }
 }
 
@@ -191,19 +285,19 @@ impl AsU32<u32> {
 //
 // For the sake of type-safety (and in particular to help avoid errors
 // with inconsistent units), by default, linear histograms do not
-// accept raw integers, but rather `AsU32`.
-pub struct Linear<T> where T: AsU32<T> { // TODO
+// accept raw integers, but rather `AsSize`.
+pub struct Linear<T> where T: AsSize<T> { // TODO
     placeholder: PhantomData<T>
 }
 
 #[allow(unused_variables)]
-impl<T> Linear<T> where T: AsU32<T> {
+impl<T> Linear<T> where T: AsSize<T> {
     fn new(mut telemetry: Telemetry, meta: Metadata, min: u32, high: u32, buckets: u16) -> Rc<Linear<T>> {
         unreachable!() // TODO
     }
 }
 
-impl<T> Histogram<u32> for Linear<T> where T:AsU32<T> {
+impl<T> Histogram<u32> for Linear<T> where T:AsSize<T> {
     fn record(&mut self, _: u32) {
         unreachable!() // TODO
     }
@@ -226,19 +320,19 @@ impl<T> HistogramBase for Linear<T> {
 //
 // For the sake of type-safety (and in particular to help avoid errors
 // with inconsistent units), by default, exponential histograms do not
-// accept raw integers, but rather `AsU32`.
-pub struct Exponential<T> where T: AsU32<T> { // TODO
+// accept raw integers, but rather `AsSize`.
+pub struct Exponential<T> where T: AsSize<T> { // TODO
     placeholder: PhantomData<T>
 }
 
 #[allow(unused_variables)]
-impl<T> Exponential<T> where T: AsU32<T> {
+impl<T> Exponential<T> where T: AsSize<T> {
     fn new(mut telemetry: Telemetry, meta: Metadata, min: u32, high: u32, buckets: u16) -> Rc<Exponential<T>> {
         unreachable!() // TODO
     }
 }
 
-impl<T> Histogram<u32> for Exponential<T> where T:AsU32<T> {
+impl<T> Histogram<u32> for Exponential<T> where T:AsSize<T> {
     fn record(&mut self, _: u32) {
         unreachable!() // TODO
     }
@@ -250,60 +344,11 @@ impl<T> HistogramBase for Exponential<T> {
 #[allow(dead_code)]
 struct Telemetry {
     flat_histograms: HashMap<String, Rc<HistogramBase>>,
-    keyed_histograms: HashMap<String, Rc<KeyedHistogramBase>>
+    keyed_histograms: HashMap<String, Rc<KeyedHistogramBase>>,
+    is_active: bool,
 }
 
 #[allow(dead_code)]
 pub struct StorageSettings; // TODO
 #[allow(dead_code)]
 pub struct ServerSettings; // TODO
-
-#[allow(dead_code)]
-#[allow(unused_variables)]
-impl Telemetry {
-    pub fn new(version: String, _: Option<StorageSettings>, _: Option<ServerSettings>) -> Telemetry {
-        unreachable!() // TODO
-    }
-
-    // If an histogram is active, record a new value to the histogram.
-    // Otherwise, do nothing.
-    pub fn record<T>(&mut self, _: &Histogram<T>, _: &FnOnce() -> Option<T>) {
-        unreachable!() // TODO
-    }
-    pub fn record_keyed<K, H, T>(&mut self, _: &KeyedHistogram<K, H, T>, _: &FnOnce() -> Option<(K, T)>) {
-        unreachable!() // TODO
-    }
-
-    // Activate or deactivate Telemetry.
-    pub fn set_active(&mut self, _: bool) {
-        unreachable!() // TODO
-    }
-    pub fn is_active(&self) -> bool {
-        unreachable!() // TODO
-    }
-
-    // Activate or dactivate individual histograms. Ignored if Telemetry
-    // is deactivated or if the histogram has expired.
-    pub fn set_active_histogram<T>(&mut self, _: Histogram<T>, _: bool) {
-        unreachable!() // TODO
-    }
-    pub fn is_active_histogram<T>(&self, _: Histogram<T>) -> bool {
-        unreachable!() // TODO
-    }
-
-    // Called automatically by histogram constructors.
-    fn register_flat(&mut self, meta: Metadata, histogram: Rc<HistogramBase>) {
-        self.flat_histograms.insert(meta.name, histogram); // FIXME: Make sure that we register each name only once.
-    }
-    fn register_keyed(&mut self, meta: Metadata, histogram: Rc<KeyedHistogramBase>) {
-        self.keyed_histograms.insert(meta.name, histogram); // FIXME: Make sure that we register each name only once.
-    }
-
-    // Export the list of histograms to a json document that may be
-    // uploaded to a Telemetry server.
-    pub fn export_histograms(&self) -> String {
-        unreachable!() // TODO
-    }
-}
-
-
