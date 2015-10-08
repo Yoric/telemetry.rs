@@ -24,15 +24,12 @@ use std::marker::PhantomData;
 // are provided, suited to distinct kinds of measures.
 //
 //
-// Important note: the memory used by a histogram is recollected only
+// Memory note: the memory used by a histogram is recollected only
 // when its instance of `telemetry` is garbage-collected. In other words,
 // if a histogram goes out of scope for some reason, its data remains
 // in telemetry and will be stored and/or uploaded in accordance with the
 // configuration of this telemetry instance.
 //
-
-// FIXME: Attempting to use a histogram with a wrong instance of
-// `telemetry` is a Bad Idea. Add an assertion.
 
 //
 // A software version, e.g. [2015, 10, 10, 0]
@@ -56,9 +53,28 @@ struct Metadata {
 }
 
 trait Histogram<T> {
+    //
+    // Record a value in this histogram.
+    //
+    // The value is recorded only if all of the following conditions are met:
+    // - `telemetry` is activated; and
+    // - this histogram has not expired; and
+    // - the histogram is active.
+    //
     fn record(&self, telemetry: &mut Telemetry, value: T) {
         self.record_cb(telemetry, || Some(value))
     }
+
+    //
+    // Record a value in this histogram, as provided by a callback.
+    //
+    // The callback is triggered only if all of the following conditions are met:
+    // - `telemetry` is activated; and
+    // - this histogram has not expired; and
+    // - the histogram is active.
+    //
+    // If the callback returns `None`, no value is recorded.
+    //
     fn record_cb<F>(&self, telemetry: &mut Telemetry, _: F) where F: FnOnce() -> Option<T>;
 }
 
@@ -126,9 +142,9 @@ impl Histogram<()> for Flag {
 impl Flag {
     fn new(telemetry: &mut Telemetry, meta: Metadata) -> Flag {
         let storage = Box::new(FlagStorage::new());
-        let index = telemetry.register_storage(meta, storage).unwrap(); // FIXME: This will self-destruct if we have expired. We probably just want to neutralize the histogram.
+        let key = telemetry.register_storage(meta, storage).unwrap(); // FIXME: This will self-destruct if we have expired. We probably just want to neutralize the histogram.
         Flag {
-            shared: Shared::new(index),
+            shared: Shared::new(key),
         }
     }
 }
@@ -185,10 +201,10 @@ impl<T> Histogram<T> for Linear<T> where T: Flatten<T> {
 impl<T> Linear<T> where T: Flatten<T> {
     fn new(telemetry: &mut Telemetry, meta: Metadata, min: u32, max: u32, buckets: usize) -> Linear<T> {
         let storage = Box::new(LinearStorage::new(buckets));
-        let index = telemetry.register_storage(meta, storage).unwrap();  // FIXME: This will self-destruct if we have expired. We probably just want to neutralize the histogram.
+        let key = telemetry.register_storage(meta, storage).unwrap();  // FIXME: This will self-destruct if we have expired. We probably just want to neutralize the histogram.
         Linear {
             witness: PhantomData,
-            shared: Shared::new(index),
+            shared: Shared::new(key),
             min: min,
             max: max,
             buckets: buckets as u32
@@ -211,16 +227,34 @@ impl<T> Linear<T> where T: Flatten<T> {
 }
 
 struct Telemetry {
+    // The name of the product.
     product: String,
+
+    // The version of the product. Some histograms may be limited to
+    // specific versions of the product.
     version: Version,
+
+    // Has telemetry been activated? `false` by default.
     is_active: bool,
+
+    // The storage for all histograms.
     stores: Vec<Box<RawStorage>>,
 }
 
 struct StorageSettings; // FIXME: Define
 struct ServerSettings; // FIXME: Define
 
+struct StorageKey {
+    index: usize,
+    telemetry: *const Telemetry
+}
+
 impl Telemetry {
+    //
+    // Construct a new instance of telemetry.
+    //
+    // This instance is deactivated by default.
+    //
     pub fn new(product: String,
                version: Version,
                _: Option<StorageSettings>,
@@ -233,7 +267,22 @@ impl Telemetry {
         }
     }
 
-    fn register_storage(&mut self, meta: Metadata, storage: Box<RawStorage>) -> Option<usize> {
+    //
+    // Activate/deactivate Telemetry. If Telemetry is deactivated,
+    // it will not record new data.
+    //
+    pub fn set_active(&mut self, value: bool) {
+        self.is_active = value;
+    }
+
+    pub fn is_active(&self) -> bool {
+        self.is_active
+    }
+
+    //
+    // Register the `RawStorage` used by an histogram.
+    //
+    fn register_storage(&mut self, meta: Metadata, storage: Box<RawStorage>) -> Option<StorageKey> {
         {
             // Don't add the histogram if it is expired.
             match meta.expires {
@@ -242,10 +291,19 @@ impl Telemetry {
             }
         }
         self.stores.push(storage);
-        Some(self.stores.len())
+        Some(StorageKey {
+            index: self.stores.len(), // Note: this won't be 0.
+            telemetry: self
+        })
     }
+
+    //
+    // 
+    //
     fn raw_record(&mut self, histogram: &Shared, value: u32) {
-        let ref mut storage = self.stores[histogram.index];
+        assert!(histogram.key.index != 0);
+        assert!(histogram.key.telemetry == self);
+        let ref mut storage = self.stores[histogram.key.index];
         storage.store(value);
     }
 }
@@ -264,7 +322,7 @@ trait RawStorage {
 //
 struct Shared {
     // A key used to map a histogram to its storage owned by telemetry.
-    index: usize,
+    key: StorageKey,
 
     // `true` unless the histogram has been deactivated by user request.
     // If `false`, no data will be recorded for this histogram.
@@ -276,9 +334,9 @@ struct Shared {
 }
 
 impl Shared {
-    fn new(index: usize) -> Shared {
+    fn new(key: StorageKey) -> Shared {
         Shared {
-            index: index,
+            key: key,
             is_active: true,
             is_expired: false
         }
