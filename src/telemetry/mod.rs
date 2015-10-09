@@ -128,7 +128,7 @@ impl RawStorage for FlagStorage {
 
 pub struct Flag {
     shared: Shared,
-    // FIXME: We could cache the value to avoid sending messages across threads
+    // FIXME: We could cache the value to avoid sending messages across threads.
 }
 
 impl Histogram<()> for Flag {
@@ -291,11 +291,16 @@ pub struct Telemetry {
     // Has telemetry been activated? `false` by default.
     is_active: bool,
 
+    // A key generator for registration of new histograms. Uses atomic
+    // to avoid the use of &mut.
     generator: KeyGenerator,
 
+    // Connection to the thread holding all the storage of this
+    // instance of telemetry.
     sender: Sender<Op>,
 }
 
+static tele : Telemetry = Telemetry::new("test", [0, 0, 0, 0]);
 /*
 pub struct StorageSettings; // FIXME: Define
 pub struct ServerSettings; // FIXME: Define
