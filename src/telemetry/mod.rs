@@ -247,30 +247,54 @@ impl<K> HistogramMap<K, ()> for FlagMap<K> where K: ToString {
 pub type LinearSingle<T> = LinearFront<Flat, T>;
 pub type LinearMap<K, T> = LinearFront<Keyed<K>, T>;
 
+struct LinearBuckets {
+    min: u32,
+    max: u32, // Invariant: max > min
+    buckets: usize
+}
+
+impl LinearBuckets {
+    fn get_bucket(&self, value: u32) -> usize {
+        if value >= self.max {
+            0
+        } else if value <= self.min {
+            self.buckets - 1 as usize
+        } else {
+            let num = value as f32 - self.min as f32;
+            let den = self.max as f32 - self.min as f32;
+            let res = (num / den) * self.buckets as f32;
+            res as usize
+        }
+    }
+}
+
 struct LinearStorage {
-    values: Vec<u32>// We cannot use an array here, as this would make the struct unsized
+    values: Vec<u32>,// We cannot use an array here, as this would make the struct unsized
+    shape: LinearBuckets,
 }
 
 impl LinearStorage {
-    fn new(capacity: usize) -> LinearStorage {
-        let mut vec = Vec::with_capacity(capacity);
+    fn new(shape: LinearBuckets) -> LinearStorage {
+        let mut vec = Vec::with_capacity(shape.buckets);
         unsafe {
             // Resize. In future versions of Rust, we should
             // be able to use `vec.resize`.
-            vec.set_len(capacity);
-            for i in 0 .. capacity - 1 {
+            vec.set_len(shape.buckets);
+            for i in 0 .. shape.buckets - 1 {
                 vec[i] = 0;
             }
         }
         LinearStorage {
-            values: vec
+            values: vec,
+            shape: shape,
         }
     }
 }
 
 impl RawStorage for LinearStorage {
-    fn store(&mut self, index: u32) {
-        self.values[index as usize] += 1;
+    fn store(&mut self, value: u32) {
+        let index = self.shape.get_bucket(value);
+        self.values[index] += 1;
     }
     fn serialize(&self) -> Json {
         unreachable!() // FIXME: Implement
@@ -280,25 +304,6 @@ impl RawStorage for LinearStorage {
 pub struct LinearFront<K, T> where T: Flatten {
     witness: PhantomData<T>,
     back_end: BackEnd<K>,
-    min: u32,
-    max: u32, // Invariant: max > min
-    buckets: u32 // Invariant: sizeof(u32) <= sizeof(usize)
-}
-
-impl<K, T> LinearFront<K, T> where T: Flatten {
-    fn get_bucket(&self, value: T) -> u32 {
-        let value = value.as_u32();
-        if value >= self.max {
-            0
-        } else if value <= self.min {
-            self.buckets - 1 as u32
-        } else {
-            let num = value as f32 - self.min as f32;
-            let den = self.max as f32 - self.min as f32;
-            let res = (num / den) * self.buckets as f32;
-            res as u32
-        }
-    }
 }
 
 impl<T> Histogram<T> for LinearSingle<T> where T: Flatten {
@@ -306,7 +311,7 @@ impl<T> Histogram<T> for LinearSingle<T> where T: Flatten {
         if let Some(k) = self.back_end.get_key() {
             match cb() {
                 None => {}
-                Some(v) => self.back_end.raw_record(&k, self.get_bucket(v))
+                Some(v) => self.back_end.raw_record(&k, v.as_u32())
             }
         }
     }
@@ -317,14 +322,12 @@ impl<T> LinearSingle<T> where T: Flatten {
         assert!(size_of::<u32>() <= size_of::<usize>());
         assert!(min < max);
         assert!(max - min >= buckets as u32);
-        let storage = Box::new(LinearStorage::new(buckets));
+        let shape = LinearBuckets { min: min, max: max, buckets: buckets };
+        let storage = Box::new(LinearStorage::new(shape));
         let key = feature.telemetry.register_flat(meta, storage);
         LinearFront {
             witness: PhantomData,
             back_end: BackEnd::new(feature, key),
-            min: min,
-            max: max,
-            buckets: buckets as u32
         }
     }
 }
@@ -332,35 +335,36 @@ impl<T> LinearSingle<T> where T: Flatten {
 
 struct LinearStorageMap {
     values: HashMap<String, Vec<u32>>,
-    capacity: usize
+    shape: LinearBuckets,
 }
 
 impl LinearStorageMap {
-    fn new(buckets: usize) -> LinearStorageMap {
+    fn new(shape: LinearBuckets) -> LinearStorageMap {
         LinearStorageMap {
             values: HashMap::new(),
-            capacity: buckets,
+            shape: shape
         }
     }
 }
 
 impl RawStorageMap for LinearStorageMap {
-    fn store(&mut self, key: String, index: u32) {
+    fn store(&mut self, key: String, value: u32) {
+        let index = self.shape.get_bucket(value);
         match self.values.entry(key) {
             Occupied(mut e) => {
-                e.get_mut()[index as usize] += 1;
+                e.get_mut()[index] += 1;
             }
             Vacant(e) => {
-                let mut vec = Vec::with_capacity(self.capacity);
+                let mut vec = Vec::with_capacity(self.shape.buckets);
                 unsafe {
                     // Resize. In future versions of Rust, we should
                     // be able to use `vec.resize`.
-                    vec.set_len(self.capacity);
-                    for i in 0 .. self.capacity - 1 {
+                    vec.set_len(self.shape.buckets);
+                    for i in 0 .. self.shape.buckets - 1 {
                         vec[i] = 0;
                     }
                 }
-                vec[index as usize] += 1;
+                vec[index] += 1;
                 e.insert(vec);
             }
         }
@@ -376,14 +380,12 @@ impl<K, T> LinearMap<K, T> where K: ToString, T: Flatten {
         assert!(size_of::<u32>() <= size_of::<usize>());
         assert!(min < max);
         assert!(max - min >= buckets as u32);
-        let storage = Box::new(LinearStorageMap::new(buckets));
+        let shape = LinearBuckets { min: min, max: max, buckets: buckets };
+        let storage = Box::new(LinearStorageMap::new(shape));
         let key = feature.telemetry.register_keyed(meta, storage);
         LinearFront {
             witness: PhantomData,
             back_end: BackEnd::new(feature, key),
-            min: min,
-            max: max,
-            buckets: buckets as u32
         }
     }
 }
@@ -393,7 +395,7 @@ impl<K, T> HistogramMap<K, T> for LinearMap<K, T> where K: ToString, T: Flatten 
         if let Some(k) = self.back_end.get_key() {
             match cb() {
                 None => {}
-                Some((key, v)) => self.back_end.raw_record(&k, key.to_string(), self.get_bucket(v))
+                Some((key, v)) => self.back_end.raw_record(&k, key.to_string(), v.as_u32())
             }
         }
     }
