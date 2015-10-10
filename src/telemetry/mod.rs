@@ -186,11 +186,11 @@ impl Histogram<()> for FlagSingle {
 
 
 impl FlagSingle {
-    pub fn new(telemetry: &Telemetry, meta: Metadata) -> FlagSingle {
+    pub fn new(feature: &Feature, meta: Metadata) -> FlagSingle {
         let storage = Box::new(FlagStorage { encountered: false });
-        let key = telemetry.register_flat(meta, storage);
+        let key = feature.telemetry.register_flat(meta, storage);
         FlagFront {
-            back_end: BackEnd::new(telemetry, key),
+            back_end: BackEnd::new(feature, key),
         }
     }
 }
@@ -200,11 +200,11 @@ impl FlagSingle {
 // a single `FlagMap` is both more efficient and more type-safe.
 
 impl<K> FlagMap<K> where K: ToString {
-    pub fn new(telemetry: &Telemetry, meta: Metadata) -> FlagMap<K> {
+    pub fn new(feature: &Feature, meta: Metadata) -> FlagMap<K> {
         let storage = Box::new(FlagStorageMap { encountered: HashSet::new() });
-        let key = telemetry.register_keyed(meta, storage);
+        let key = feature.telemetry.register_keyed(meta, storage);
         FlagMap {
-            back_end: BackEnd::new(telemetry, key),
+            back_end: BackEnd::new(feature, key),
         }
     }
 }
@@ -313,15 +313,15 @@ impl<T> Histogram<T> for LinearSingle<T> where T: Flatten<T> {
 }
 
 impl<T> LinearSingle<T> where T: Flatten<T> {
-    fn new(telemetry: &Telemetry, meta: Metadata, min: u32, max: u32, buckets: usize) -> LinearSingle<T> {
+    fn new(feature: &Feature, meta: Metadata, min: u32, max: u32, buckets: usize) -> LinearSingle<T> {
         assert!(size_of::<u32>() <= size_of::<usize>());
         assert!(min < max);
         assert!(max - min >= buckets as u32);
         let storage = Box::new(LinearStorage::new(buckets));
-        let key = telemetry.register_flat(meta, storage);
+        let key = feature.telemetry.register_flat(meta, storage);
         LinearFront {
             witness: PhantomData,
-            back_end: BackEnd::new(telemetry, key),
+            back_end: BackEnd::new(feature, key),
             min: min,
             max: max,
             buckets: buckets as u32
@@ -372,15 +372,15 @@ impl RawStorageMap for LinearStorageMap {
 
 
 impl<K, T> LinearMap<K, T> where K: ToString, T: Flatten<T> {
-    fn new(telemetry: &Telemetry, meta: Metadata, min: u32, max: u32, buckets: usize) -> LinearMap<K, T> {
+    fn new(feature: &Feature, meta: Metadata, min: u32, max: u32, buckets: usize) -> LinearMap<K, T> {
         assert!(size_of::<u32>() <= size_of::<usize>());
         assert!(min < max);
         assert!(max - min >= buckets as u32);
         let storage = Box::new(LinearStorageMap::new(buckets));
-        let key = telemetry.register_keyed(meta, storage);
+        let key = feature.telemetry.register_keyed(meta, storage);
         LinearFront {
             witness: PhantomData,
-            back_end: BackEnd::new(telemetry, key),
+            back_end: BackEnd::new(feature, key),
             min: min,
             max: max,
             buckets: buckets as u32
@@ -399,14 +399,33 @@ impl<K, T> HistogramMap<K, T> for LinearMap<K, T> where K: ToString, T: Flatten<
     }
 }
 
+//
+// A group of histograms observed by Telemetry.
+//
+impl Feature {
+    //
+    // Create a new feature.
+    //
+    // New features are deactivated by default.
+    //
+    pub fn new(telemetry: &Arc<Telemetry>) -> Feature {
+        Feature {
+            is_active: Arc::new(Cell::new(false)),
+            sender: telemetry.sender.clone(),
+            telemetry: telemetry.clone(),
+        }
+    }
+}
+
+//
+// The Telemetry service.
+//
+// Generally, an application will have only a single instance of this
+// service but may have any number of instances of `Feature` which may
+// be activated and deactivated individually.
+//
 impl Telemetry {
-    /**
-     * Create an instance of telemetry.
-     *
-     * Note that a single application can host several instances of telemetry,
-     * e.g. for distinct privacy levels.
-     */
-    fn new(version: Version) -> Telemetry {
+    pub fn new(version: Version) -> Telemetry {
         let (sender, receiver) = channel();
         thread::spawn(|| {
             let mut data = TelemetryTask::new();
@@ -437,7 +456,6 @@ impl Telemetry {
             keys_keyed: KeyGenerator::new(),
             version: version,
             sender: sender,
-            is_active: Arc::new(Cell::new(false)),
         }
     }
 
@@ -471,9 +489,6 @@ pub struct Telemetry {
     // specific versions of the product.
     version: Version,
 
-    // Has telemetry been activated? `false` by default.
-    is_active: Arc<Cell<bool>>,
-
     // A key generator for registration of new histograms. Uses atomic
     // to avoid the use of &mut.
     keys_flat: KeyGenerator<Flat>,
@@ -484,6 +499,12 @@ pub struct Telemetry {
     sender: Sender<Op>,
 }
 
+pub struct Feature {
+    // Are measurements active for this feature?
+    is_active: Arc<Cell<bool>>,
+    sender: Sender<Op>,
+    telemetry: Arc<Telemetry>,
+}
 
 //
 // Low-level, untyped, implementation of histogram storage.
@@ -511,16 +532,16 @@ struct BackEnd<K> {
     is_active: bool,
 
     sender: Sender<Op>,
-    is_telemetry_active: Arc<Cell<bool>>,
+    is_feature_active: Arc<Cell<bool>>,
 }
 
 impl<K> BackEnd<K> {
-    fn new(telemetry: &Telemetry, key: Option<Key<K>>) -> BackEnd<K> {
+    fn new(feature: &Feature, key: Option<Key<K>>) -> BackEnd<K> {
         BackEnd {
             key: key,
             is_active: true,
-            sender: telemetry.sender.clone(),
-            is_telemetry_active: telemetry.is_active.clone(),
+            sender: feature.sender.clone(),
+            is_feature_active: feature.is_active.clone(),
         }
     }
 
@@ -529,7 +550,7 @@ impl<K> BackEnd<K> {
         if !self.is_active {
             return None;
         }
-        if !self.is_telemetry_active.get() {
+        if !self.is_feature_active.get() {
             return None;
         }
         match self.key {
@@ -615,34 +636,36 @@ impl TelemetryTask {
 #[cfg(test)]
 mod tests {
     use super::*;
-
+    use std::sync::Arc;
     use telemetry::{Histogram, HistogramMap};
 
     #[test]
     fn create_flags() {
-        let telemetry = Telemetry::new([0, 0, 0, 0]);
-        let flag_single = FlagSingle::new(&telemetry, Metadata { key: "Test linear single".to_string(), expires: None});
-        let flag_map = FlagMap::new(&telemetry, Metadata { key: "Test flag map".to_string(), expires: None});
+        let telemetry = Arc::new(Telemetry::new([0, 0, 0, 0]));
+        let feature = Feature::new(&telemetry);
+        let flag_single = FlagSingle::new(&feature, Metadata { key: "Test linear single".to_string(), expires: None});
+        let flag_map = FlagMap::new(&feature, Metadata { key: "Test flag map".to_string(), expires: None});
 
         flag_single.record(());
         flag_map.record("key".to_string(), ());
 
-        telemetry.is_active.set(true);
+        feature.is_active.set(true);
         flag_single.record(());
         flag_map.record("key".to_string(), ());
     }
 
     #[test]
     fn create_linears() {
-        let telemetry = Telemetry::new([0, 0, 0, 0]);
+        let telemetry = Arc::new(Telemetry::new([0, 0, 0, 0]));
+        let feature = Feature::new(&telemetry);
         let linear_single =
-            LinearSingle::new(&telemetry,
+            LinearSingle::new(&feature,
                               Metadata {
                                   key: "Test linear single".to_string(),
                                   expires: None
                               }, 0, 100, 10);
         let linear_map =
-            LinearMap::new(&telemetry,
+            LinearMap::new(&feature,
                               Metadata {
                                   key: "Test linear map".to_string(),
                                   expires: None
@@ -651,7 +674,7 @@ mod tests {
         linear_single.record(0);
         linear_map.record("key".to_string(), 0);
 
-        telemetry.is_active.set(true);
+        feature.is_active.set(true);
         linear_single.record(0);
         linear_map.record("key".to_string(), 0);
     }
