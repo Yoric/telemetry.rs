@@ -122,11 +122,11 @@ trait HistogramMap<K, T> {
 }
 
 
-pub trait Flatten<T> {
+pub trait Flatten {
     fn as_u32(&self) -> u32;
 }
 
-impl Flatten<u32> for u32 {
+impl Flatten for u32 {
     fn as_u32(&self) -> u32 {
         *self
     }
@@ -277,7 +277,7 @@ impl RawStorage for LinearStorage {
     }
 }
 
-pub struct LinearFront<K, T> where T: Flatten<T> {
+pub struct LinearFront<K, T> where T: Flatten {
     witness: PhantomData<T>,
     back_end: BackEnd<K>,
     min: u32,
@@ -285,7 +285,7 @@ pub struct LinearFront<K, T> where T: Flatten<T> {
     buckets: u32 // Invariant: sizeof(u32) <= sizeof(usize)
 }
 
-impl<K, T> LinearFront<K, T> where T: Flatten<T> {
+impl<K, T> LinearFront<K, T> where T: Flatten {
     fn get_bucket(&self, value: T) -> u32 {
         let value = value.as_u32();
         if value >= self.max {
@@ -301,7 +301,7 @@ impl<K, T> LinearFront<K, T> where T: Flatten<T> {
     }
 }
 
-impl<T> Histogram<T> for LinearSingle<T> where T: Flatten<T> {
+impl<T> Histogram<T> for LinearSingle<T> where T: Flatten {
     fn record_cb<F>(&self, cb: F) where F: FnOnce() -> Option<T>  {
         if let Some(k) = self.back_end.get_key() {
             match cb() {
@@ -312,7 +312,7 @@ impl<T> Histogram<T> for LinearSingle<T> where T: Flatten<T> {
     }
 }
 
-impl<T> LinearSingle<T> where T: Flatten<T> {
+impl<T> LinearSingle<T> where T: Flatten {
     fn new(feature: &Feature, meta: Metadata, min: u32, max: u32, buckets: usize) -> LinearSingle<T> {
         assert!(size_of::<u32>() <= size_of::<usize>());
         assert!(min < max);
@@ -371,7 +371,7 @@ impl RawStorageMap for LinearStorageMap {
 }
 
 
-impl<K, T> LinearMap<K, T> where K: ToString, T: Flatten<T> {
+impl<K, T> LinearMap<K, T> where K: ToString, T: Flatten {
     fn new(feature: &Feature, meta: Metadata, min: u32, max: u32, buckets: usize) -> LinearMap<K, T> {
         assert!(size_of::<u32>() <= size_of::<usize>());
         assert!(min < max);
@@ -388,7 +388,7 @@ impl<K, T> LinearMap<K, T> where K: ToString, T: Flatten<T> {
     }
 }
 
-impl<K, T> HistogramMap<K, T> for LinearMap<K, T> where K: ToString, T: Flatten<T> {
+impl<K, T> HistogramMap<K, T> for LinearMap<K, T> where K: ToString, T: Flatten {
     fn record_cb<F>(&self, cb: F) where F: FnOnce() -> Option<(K, T)>  {
         if let Some(k) = self.back_end.get_key() {
             match cb() {
