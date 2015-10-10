@@ -63,7 +63,7 @@ pub struct Metadata {
 //
 // A single histogram.
 //
-trait SingleHistogram<T> {
+pub trait SingleHistogram<T> {
     //
     // Record a value in this histogram.
     //
@@ -94,7 +94,7 @@ trait SingleHistogram<T> {
 // monitor families of values that cannot be determined at
 // compile-time, e.g. add-ons, programs, etc.
 //
-trait KeyedHistogram<K, T> {
+pub trait KeyedHistogram<K, T> {
     //
     // Record a value in this histogram.
     //
@@ -430,7 +430,7 @@ impl Feature {
     //
     // New features are deactivated by default.
     //
-    pub fn new(telemetry: &Arc<Telemetry>) -> Feature {
+    pub fn new(telemetry: &Arc<Service>) -> Feature {
         Feature {
             is_active: Arc::new(Cell::new(false)),
             sender: telemetry.sender.clone(),
@@ -446,8 +446,8 @@ impl Feature {
 // service but may have any number of instances of `Feature` which may
 // be activated and deactivated individually.
 //
-impl Telemetry {
-    pub fn new(version: Version) -> Telemetry {
+impl Service {
+    pub fn new(version: Version) -> Service {
         let (sender, receiver) = channel();
         thread::spawn(|| {
             let mut data = TelemetryTaskData::new();
@@ -483,7 +483,7 @@ impl Telemetry {
                 }
             }
         });
-        Telemetry {
+        Service {
             keys_single: KeyGenerator::new(),
             keys_keyed: KeyGenerator::new(),
             version: version,
@@ -522,7 +522,7 @@ impl Telemetry {
     }
 }
 
-pub struct Telemetry {
+pub struct Service {
     // The version of the product. Some histograms may be limited to
     // specific versions of the product.
     version: Version,
@@ -541,7 +541,7 @@ pub struct Feature {
     // Are measurements active for this feature?
     is_active: Arc<Cell<bool>>,
     sender: Sender<Op>,
-    telemetry: Arc<Telemetry>,
+    telemetry: Arc<Service>,
 }
 
 //
@@ -703,12 +703,11 @@ mod tests {
     use std::collections::BTreeMap;
 
     use super::*;
-    use telemetry::{Histogram, HistogramMap};
 
 
     #[test]
     fn create_flags() {
-        let telemetry = Arc::new(Telemetry::new([0, 0, 0, 0]));
+        let telemetry = Arc::new(Service::new([0, 0, 0, 0]));
         let feature = Feature::new(&telemetry);
         let flag_single = SingleFlag::new(&feature, Metadata { key: "Test linear single".to_string(), expires: None});
         let flag_map = KeyedFlag::new(&feature, Metadata { key: "Test flag map".to_string(), expires: None});
@@ -723,7 +722,7 @@ mod tests {
 
     #[test]
     fn create_linears() {
-        let telemetry = Arc::new(Telemetry::new([0, 0, 0, 0]));
+        let telemetry = Arc::new(Service::new([0, 0, 0, 0]));
         let feature = Feature::new(&telemetry);
         let linear_single =
             LinearSingle::new(&feature,
@@ -748,7 +747,7 @@ mod tests {
 
     #[test]
     fn test_serialize_simple() {
-        let telemetry = Arc::new(Telemetry::new([0, 0, 0, 0]));
+        let telemetry = Arc::new(Service::new([0, 0, 0, 0]));
         let feature = Feature::new(&telemetry);
 
         feature.is_active.set(true);
