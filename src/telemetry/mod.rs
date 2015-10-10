@@ -8,7 +8,7 @@ use std::marker::PhantomData;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::collections::hash_map::Entry::{Occupied, Vacant};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::mpsc::{channel, Sender};
 use std::thread;
@@ -16,9 +16,8 @@ use std::mem::size_of;
 use std::sync::Arc;
 use std::cell::Cell;
 
-//
 // Telemetry is a mechanism used to capture metrics in an application,
-// and either store the data locally or upload to a server for
+// to later store the data locally or upload it to a server for
 // statistical analysis.
 //
 // Examples of usage:
@@ -145,26 +144,26 @@ impl Flatten for u32 {
 //
 
 // Single histogram, good for recording a single value.
-pub type SingleFlag = FlagFront<Single>;
+pub struct SingleFlag {
+    back_end: BackEnd<Single>,
+    cache: AtomicBool,
+}
 
 // Map histogram, good for recording the presence of a set of values,
 // when the set cannot be known at compile-time. If the set is known
 // at compile-time, you should prefer several instances of
 // `SingleFlag`.
-pub type KeyedFlag<T> = FlagFront<Keyed<T>>;
-
-
-struct FlagFront<K> {
-    back_end: BackEnd<K>,
+pub struct KeyedFlag<T> {
+    back_end: BackEnd<Keyed<T>>
 }
 
-struct FlagStorage {
+struct SingleFlagStorage {
     // `true` once we have called `record`, `false` until then.
     encountered: bool
 }
 
 
-impl RawStorage for FlagStorage {
+impl RawStorage for SingleFlagStorage {
     fn store(&mut self, _: u32) {
         self.encountered = true;
     }
@@ -179,6 +178,11 @@ impl RawStorage for FlagStorage {
 
 impl SingleHistogram<()> for SingleFlag {
     fn record_cb<F>(&self, cb: F) where F: FnOnce() -> Option<()>  {
+        if self.cache.load(Ordering::Relaxed) {
+            // Don't bother with dereferencing values or sending
+            // messages, the histogram is already full.
+            return;
+        }
         if let Some(k) = self.back_end.get_key() {
             match cb() {
                 None => {}
@@ -191,10 +195,11 @@ impl SingleHistogram<()> for SingleFlag {
 
 impl SingleFlag {
     pub fn new(feature: &Feature, meta: Metadata) -> SingleFlag {
-        let storage = Box::new(FlagStorage { encountered: false });
+        let storage = Box::new(SingleFlagStorage { encountered: false });
         let key = feature.telemetry.register_single(meta, storage);
-        FlagFront {
+        SingleFlag {
             back_end: BackEnd::new(feature, key),
+            cache: AtomicBool::new(false),
         }
     }
 }
@@ -205,7 +210,7 @@ impl SingleFlag {
 
 impl<K> KeyedFlag<K> where K: ToString {
     pub fn new(feature: &Feature, meta: Metadata) -> KeyedFlag<K> {
-        let storage = Box::new(FlagStorageMap { encountered: HashSet::new() });
+        let storage = Box::new(KeyedFlagStorage { encountered: HashSet::new() });
         let key = feature.telemetry.register_keyed(meta, storage);
         KeyedFlag {
             back_end: BackEnd::new(feature, key),
@@ -213,11 +218,11 @@ impl<K> KeyedFlag<K> where K: ToString {
     }
 }
 
-struct FlagStorageMap {
+struct KeyedFlagStorage {
     encountered: HashSet<String>
 }
 
-impl RawStorageMap for FlagStorageMap {
+impl RawStorageMap for KeyedFlagStorage {
     fn store(&mut self, k: String, _: u32) {
         self.encountered.insert(k);
     }
