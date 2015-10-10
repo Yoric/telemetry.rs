@@ -158,7 +158,7 @@ pub type FlagMap<T> = FlagFront<Keyed<T>>;
 
 
 struct FlagFront<K> {
-    shared: Shared<K>,
+    back_end: BackEnd<K>,
 }
 
 struct FlagStorage {
@@ -178,7 +178,7 @@ impl RawStorage for FlagStorage {
 
 impl Histogram<()> for FlagSingle {
     fn record_cb<F>(&self, cb: F) where F: FnOnce() -> Option<()>  {
-        self.shared.with_key(|k, telemetry| {
+        self.back_end.with_key(|k, telemetry| {
             match cb() {
                 None => {}
                 Some(()) => telemetry.raw_record_flat(&k, 0)
@@ -193,7 +193,7 @@ impl FlagSingle {
         let storage = Box::new(FlagStorage { encountered: false });
         let key = telemetry.register_flat(meta, storage);
         FlagFront {
-            shared: Shared::new(telemetry, key),
+            back_end: BackEnd::new(telemetry, key),
         }
     }
 }
@@ -207,7 +207,7 @@ impl<K> FlagMap<K> where K: ToString {
         let storage = Box::new(FlagStorageMap { encountered: HashSet::new() });
         let key = telemetry.register_keyed(meta, storage);
         FlagMap {
-            shared: Shared::new(telemetry, key),
+            back_end: BackEnd::new(telemetry, key),
         }
     }
 }
@@ -227,7 +227,7 @@ impl RawStorageMap for FlagStorageMap {
 
 impl<K> HistogramMap<K, ()> for FlagMap<K> where K: ToString {
     fn record_cb<F>(&self, cb: F) where F: FnOnce() -> Option<(K, ())>  {
-        self.shared.with_key(|k, telemetry| {
+        self.back_end.with_key(|k, telemetry| {
             match cb() {
                 None => {}
                 Some((key, ())) => telemetry.raw_record_keyed(k, key.to_string(), 0)
@@ -273,7 +273,7 @@ impl RawStorage for LinearStorage {
 
 pub struct LinearFront<K, T> where T: Flatten<T> {
     witness: PhantomData<T>,
-    shared: Shared<K>,
+    back_end: BackEnd<K>,
     min: u32,
     max: u32, // Invariant: max > min
     buckets: u32 // Invariant: sizeof(u32) <= sizeof(usize)
@@ -297,7 +297,7 @@ impl<K, T> LinearFront<K, T> where T: Flatten<T> {
 
 impl<T> Histogram<T> for LinearSingle<T> where T: Flatten<T> {
     fn record_cb<F>(&self, cb: F) where F: FnOnce() -> Option<T>  {
-        self.shared.with_key(|k, telemetry| {
+        self.back_end.with_key(|k, telemetry| {
             match cb() {
                 None => {}
                 Some(v) => telemetry.raw_record_flat(&k, self.get_bucket(v))
@@ -315,7 +315,7 @@ impl<T> LinearSingle<T> where T: Flatten<T> {
         let key = telemetry.register_flat(meta, storage);
         LinearFront {
             witness: PhantomData,
-            shared: Shared::new(telemetry, key),
+            back_end: BackEnd::new(telemetry, key),
             min: min,
             max: max,
             buckets: buckets as u32
@@ -374,7 +374,7 @@ impl<K, T> LinearMap<K, T> where K: ToString, T: Flatten<T> {
         let key = telemetry.register_keyed(meta, storage);
         LinearFront {
             witness: PhantomData,
-            shared: Shared::new(telemetry, key),
+            back_end: BackEnd::new(telemetry, key),
             min: min,
             max: max,
             buckets: buckets as u32
@@ -492,7 +492,7 @@ trait RawStorageMap: Send {
 //
 // Features shared by all histograms
 //
-struct Shared<K> {
+struct BackEnd<K> {
     // A key used to map a histogram to its storage owned by telemetry,
     // or None if the histogram has been rejected by telemetry because
     // it has expired.
@@ -505,9 +505,9 @@ struct Shared<K> {
     telemetry: Arc<Telemetry>
 }
 
-impl<K> Shared<K> {
-    fn new(telemetry: &Arc<Telemetry>, key: Option<Key<K>>) -> Shared<K> {
-        Shared {
+impl<K> BackEnd<K> {
+    fn new(telemetry: &Arc<Telemetry>, key: Option<Key<K>>) -> BackEnd<K> {
+        BackEnd {
             key: key,
             is_active: true,
             telemetry: telemetry.clone(),
