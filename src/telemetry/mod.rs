@@ -6,7 +6,7 @@ use self::vec_map::VecMap;
 
 use std::marker::PhantomData;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::collections::hash_map::Entry::{Occupied, Vacant};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::atomic::Ordering::Relaxed;
@@ -168,8 +168,12 @@ impl RawStorage for FlagStorage {
     fn store(&mut self, _: u32) {
         self.encountered = true;
     }
-    fn serialize(&self) -> Json {
-        unreachable!() // FIXME: Implement
+    fn serialize(&self, format: &SerializationFormat) -> Json {
+        match format {
+            Simple => {
+                Json::Boolean(self.encountered)
+            }
+        }
     }
 }
 
@@ -217,8 +221,16 @@ impl RawStorageMap for FlagStorageMap {
     fn store(&mut self, k: String, _: u32) {
         self.encountered.insert(k);
     }
-    fn serialize(&self) -> Json {
-        unreachable!() // FIXME: Implement
+    fn serialize(&self, format: &SerializationFormat) -> Json {
+        match format {
+            Simple => {
+                let mut keys = Vec::with_capacity(self.encountered.len());
+                for key in &self.encountered {
+                    keys.push(Json::String(key.clone())) // FIXME: Why do I need to copy a String for this?
+                }
+                Json::Array(keys)
+            }
+        }
     }
 }
 
@@ -296,7 +308,7 @@ impl RawStorage for LinearStorage {
         let index = self.shape.get_bucket(value);
         self.values[index] += 1;
     }
-    fn serialize(&self) -> Json {
+    fn serialize(&self, format: &SerializationFormat) -> Json {
         unreachable!() // FIXME: Implement
     }
 }
@@ -369,7 +381,7 @@ impl RawStorageMap for LinearStorageMap {
             }
         }
     }
-    fn serialize(&self) -> Json {
+    fn serialize(&self, format: &SerializationFormat) -> Json {
         unreachable!() // FIXME: Implement
     }
 }
@@ -430,7 +442,7 @@ impl Telemetry {
     pub fn new(version: Version) -> Telemetry {
         let (sender, receiver) = channel();
         thread::spawn(|| {
-            let mut data = TelemetryTask::new();
+            let mut data = TelemetryTaskData::new();
             for msg in receiver {
                 match msg {
                     Op::RegisterFlat(index, storage) => {
@@ -441,14 +453,24 @@ impl Telemetry {
                     }
                     Op::RecordFlat(index, value) => {
                         let ref mut storage = data.flat.get_mut(&index).unwrap();
-                        storage.store(value);
+                        storage.contents.store(value);
                     }
                     Op::RecordKeyed(index, key, value) => {
                         let ref mut storage = data.keyed.get_mut(&index).unwrap();
-                        storage.store(key, value);
+                        storage.contents.store(key, value);
                     }
-                    Op::Serialize(_) => {
-                        unreachable!() // Implement
+                    Op::Serialize(format, sender) => {
+                        let mut flat_object = BTreeMap::new();
+                        for ref histogram in data.flat.values() {
+                            flat_object.insert(histogram.name.clone(), histogram.contents.serialize(&format));
+                        }
+
+                        let mut keyed_object = BTreeMap::new();
+                        for ref histogram in data.keyed.values() {
+                            keyed_object.insert(histogram.name.clone(), histogram.contents.serialize(&format));
+                        }
+
+                        sender.send((Json::Object(flat_object), Json::Object(keyed_object))).unwrap();
                     }
                 }
             }
@@ -461,6 +483,10 @@ impl Telemetry {
         }
     }
 
+    pub fn serialize(&self, format: SerializationFormat, sender: Sender<(Json, Json)>) {
+        self.sender.send(Op::Serialize(format, sender)).unwrap();
+    }
+
     fn register_flat(&self, meta: Metadata, storage: Box<RawStorage>) -> Option<Key<Flat>> {
         // Don't bother adding the histogram if it is expired.
         match meta.expires {
@@ -469,7 +495,8 @@ impl Telemetry {
         }
 
         let key = self.keys_flat.next();
-        self.sender.send(Op::RegisterFlat(key.index, storage)).unwrap();
+        let named = NamedStorage { name: meta.key, contents: storage };
+        self.sender.send(Op::RegisterFlat(key.index, named)).unwrap();
         Some(key)
     }
 
@@ -481,7 +508,8 @@ impl Telemetry {
         }
 
         let key = self.keys_keyed.next();
-        self.sender.send(Op::RegisterKeyed(key.index, storage)).unwrap();
+        let named = NamedStorage { name: meta.key, contents: storage };
+        self.sender.send(Op::RegisterKeyed(key.index, named)).unwrap();
         Some(key)
     }
 }
@@ -513,11 +541,11 @@ pub struct Feature {
 //
 trait RawStorage: Send {
     fn store(&mut self, value: u32);
-    fn serialize(&self) -> Json;
+    fn serialize(&self, &SerializationFormat) -> Json;
 }
 trait RawStorageMap: Send {
     fn store(&mut self, key: String, value: u32);
-    fn serialize(&self) -> Json;
+    fn serialize(&self, format: &SerializationFormat) -> Json;
 }
 
 //
@@ -607,39 +635,68 @@ impl KeyGenerator<Map> {
     }
 }
 
-pub struct Flat;
-pub struct Map;
-pub struct Keyed<T> {
+// Witness type, used to specify that the data is specific to a flat histogram.
+struct Flat;
+
+// Witness type, used to specify that the data is specific to a map histogram.
+struct Map;
+
+// Witness type, used to specify that the data is specific to a map
+// histogram with keys of a specific type `T`.
+struct Keyed<T> {
     witness: PhantomData<T>
 }
 
+pub enum SerializationFormat {
+    Simple,
+}
+
+struct NamedStorage<T: ?Sized> {
+    name: String,
+    contents: Box<T>,
+}
+
+type NamedStorageSingle = NamedStorage<RawStorage>;
+type NamedStorageMap = NamedStorage<RawStorageMap>;
+
+// Operations used to communicate with the TelemetryTask.
 enum Op {
-    RegisterFlat(usize, Box<RawStorage>),
-    RegisterKeyed(usize, Box<RawStorageMap>),
+    RegisterFlat(usize, NamedStorageSingle),
+    RegisterKeyed(usize, NamedStorageMap),
     RecordFlat(usize, u32),
     RecordKeyed(usize, String, u32),
-    Serialize(Sender<Json>),
+    Serialize(SerializationFormat, Sender<(Json, Json)>),
 }
 
-struct TelemetryTask {
-    flat: VecMap<Box<RawStorage>>,
-    keyed: VecMap<Box<RawStorageMap>>
+
+struct TelemetryTaskData {
+    flat: VecMap<NamedStorage<RawStorage>>,
+    keyed: VecMap<NamedStorage<RawStorageMap>>
 }
 
-impl TelemetryTask {
-    fn new() -> TelemetryTask {
-        TelemetryTask {
+impl TelemetryTaskData {
+    fn new() -> TelemetryTaskData {
+        TelemetryTaskData {
             flat: VecMap::new(),
             keyed: VecMap::new()
         }
     }
 }
 
+//////////////////////////////////// Tests
+
 #[cfg(test)]
 mod tests {
-    use super::*;
+    extern crate rustc_serialize;
+    use self::rustc_serialize::json::Json;
+
     use std::sync::Arc;
+    use std::sync::mpsc::{channel, Sender};
+    use std::collections::BTreeMap;
+
+    use super::*;
     use telemetry::{Histogram, HistogramMap};
+
 
     #[test]
     fn create_flags() {
@@ -681,4 +738,49 @@ mod tests {
         linear_map.record("key".to_string(), 0);
     }
 
+    #[test]
+    fn test_serialize_simple() {
+        let telemetry = Arc::new(Telemetry::new([0, 0, 0, 0]));
+        let feature = Feature::new(&telemetry);
+
+        feature.is_active.set(true);
+
+        // A single flag that will remain untouched.
+        let flag_single_1_name = "Test linear single 1".to_string();
+        let flag_single_1 = FlagSingle::new(&feature, Metadata { key: flag_single_1_name.clone(), expires: None});
+
+        // A single flag that will be recorded once.
+        let flag_single_2_name = "Test linear single 2".to_string();
+        let flag_single_2 = FlagSingle::new(&feature, Metadata { key: flag_single_2_name.clone(), expires: None});
+        flag_single_2.record(());
+
+        // A map flag.
+        let flag_map_name = "Test flag map".to_string();
+        let flag_map = FlagMap::new(&feature, Metadata { key: flag_map_name.clone(), expires: None});
+        let key1 = "key 1".to_string();
+        let key2 = "key 2".to_string();
+        flag_map.record(key1.clone(), ());
+        flag_map.record(key2.clone(), ());
+
+        // Serialize and check the results.
+        let (sender, receiver) = channel();
+        telemetry.serialize(SerializationFormat::Simple, sender);
+        let (flat, keyed) = receiver.recv().unwrap();
+
+        // Compare the flat stuff.
+        let mut all_flag_single = BTreeMap::new();
+        all_flag_single.insert(flag_single_1_name.clone(), Json::Boolean(false));
+        all_flag_single.insert(flag_single_2_name.clone(), Json::Boolean(true));
+        assert_eq!(flat, Json::Object(all_flag_single));
+
+        // Compare the map stuff.
+        let mut all_flag_map = BTreeMap::new();
+        all_flag_map.insert(flag_map_name.clone(),
+                            Json::Array(vec![
+                                Json::String(key2.clone()),
+                                Json::String(key1.clone())
+                                    ]));
+
+        assert_eq!(keyed, Json::Object(all_flag_map));
+    }
 }
