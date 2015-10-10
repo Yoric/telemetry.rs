@@ -12,7 +12,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::mpsc::{channel, Sender};
 use std::thread;
-use std::mem::{size_of, transmute};
+use std::mem::size_of;
 use std::sync::Arc;
 use std::cell::Cell;
 
@@ -59,10 +59,6 @@ pub struct Metadata {
 
     // Optionally, a version of the product at which this histogram expires.
     pub expires: Option<Version>,
-
-    // A human-redable description of the histogram. Do not forget units
-    // or explanations of enumeration labels.
-    pub description: String,
 }
 
 //
@@ -248,17 +244,26 @@ impl<K> HistogramMap<K, ()> for FlagMap<K> where K: ToString {
 //
 
 
-type LinearSingle<T> = LinearFront<Flat, T>;
-type LinearMap<K, T> = LinearFront<Keyed<K>, T>;
+pub type LinearSingle<T> = LinearFront<Flat, T>;
+pub type LinearMap<K, T> = LinearFront<Keyed<K>, T>;
 
 struct LinearStorage {
     values: Vec<u32>// We cannot use an array here, as this would make the struct unsized
 }
 
 impl LinearStorage {
-    fn new(buckets: usize) -> LinearStorage {
+    fn new(capacity: usize) -> LinearStorage {
+        let mut vec = Vec::with_capacity(capacity);
+        unsafe {
+            // Resize. In future versions of Rust, we should
+            // be able to use `vec.resize`.
+            vec.set_len(capacity);
+            for i in 0 .. capacity - 1 {
+                vec[i] = 0;
+            }
+        }
         LinearStorage {
-            values: Vec::with_capacity(buckets)
+            values: vec
         }
     }
 }
@@ -607,40 +612,48 @@ impl TelemetryTask {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
 
+    use telemetry::{Histogram, HistogramMap};
 
-/////////////////////////
-//
-// Experiments
+    #[test]
+    fn create_flags() {
+        let telemetry = Telemetry::new([0, 0, 0, 0]);
+        let flag_single = FlagSingle::new(&telemetry, Metadata { key: "Test linear single".to_string(), expires: None});
+        let flag_map = FlagMap::new(&telemetry, Metadata { key: "Test flag map".to_string(), expires: None});
 
-//
-// Mutable histograms.
-//
-// These histograms can only be used by one thread at a time. They are, however, faster
-// than immutable histograms.
-//
-trait MutHistogram<T> {
-    //
-    // Record a value in this histogram.
-    //
-    // The value is recorded only if all of the following conditions are met:
-    // - `telemetry` is activated; and
-    // - this histogram has not expired; and
-    // - the histogram is active.
-    //
-    fn record_mut(&mut self, value: T) {
-        self.record_cb_mut(|| Some(value))
+        flag_single.record(());
+        flag_map.record("key".to_string(), ());
+
+        telemetry.is_active.set(true);
+        flag_single.record(());
+        flag_map.record("key".to_string(), ());
     }
 
-    //
-    // Record a value in this histogram, as provided by a callback.
-    //
-    // The callback is triggered only if all of the following conditions are met:
-    // - `telemetry` is activated; and
-    // - this histogram has not expired; and
-    // - the histogram is active.
-    //
-    // If the callback returns `None`, no value is recorded.
-    //
-    fn record_cb_mut<F>(&mut self, _: F) where F: FnOnce() -> Option<T>;
+    #[test]
+    fn create_linears() {
+        let telemetry = Telemetry::new([0, 0, 0, 0]);
+        let linear_single =
+            LinearSingle::new(&telemetry,
+                              Metadata {
+                                  key: "Test linear single".to_string(),
+                                  expires: None
+                              }, 0, 100, 10);
+        let linear_map =
+            LinearMap::new(&telemetry,
+                              Metadata {
+                                  key: "Test linear map".to_string(),
+                                  expires: None
+                              }, 0, 100, 10);
+
+        linear_single.record(0);
+        linear_map.record("key".to_string(), 0);
+
+        telemetry.is_active.set(true);
+        linear_single.record(0);
+        linear_map.record("key".to_string(), 0);
+    }
+
 }
