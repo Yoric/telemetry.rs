@@ -64,7 +64,7 @@ pub struct Metadata {
 //
 // A single histogram.
 //
-trait Histogram<T> {
+trait SingleHistogram<T> {
     //
     // Record a value in this histogram.
     //
@@ -95,7 +95,7 @@ trait Histogram<T> {
 // monitor families of values that cannot be determined at
 // compile-time, e.g. add-ons, programs, etc.
 //
-trait HistogramMap<K, T> {
+trait KeyedHistogram<K, T> {
     //
     // Record a value in this histogram.
     //
@@ -145,13 +145,13 @@ impl Flatten for u32 {
 //
 
 // Single histogram, good for recording a single value.
-pub type FlagSingle = FlagFront<Flat>;
+pub type SingleFlag = FlagFront<Single>;
 
 // Map histogram, good for recording the presence of a set of values,
 // when the set cannot be known at compile-time. If the set is known
 // at compile-time, you should prefer several instances of
-// `FlagSingle`.
-pub type FlagMap<T> = FlagFront<Keyed<T>>;
+// `SingleFlag`.
+pub type KeyedFlag<T> = FlagFront<Keyed<T>>;
 
 
 struct FlagFront<K> {
@@ -177,7 +177,7 @@ impl RawStorage for FlagStorage {
     }
 }
 
-impl Histogram<()> for FlagSingle {
+impl SingleHistogram<()> for SingleFlag {
     fn record_cb<F>(&self, cb: F) where F: FnOnce() -> Option<()>  {
         if let Some(k) = self.back_end.get_key() {
             match cb() {
@@ -189,10 +189,10 @@ impl Histogram<()> for FlagSingle {
 }
 
 
-impl FlagSingle {
-    pub fn new(feature: &Feature, meta: Metadata) -> FlagSingle {
+impl SingleFlag {
+    pub fn new(feature: &Feature, meta: Metadata) -> SingleFlag {
         let storage = Box::new(FlagStorage { encountered: false });
-        let key = feature.telemetry.register_flat(meta, storage);
+        let key = feature.telemetry.register_single(meta, storage);
         FlagFront {
             back_end: BackEnd::new(feature, key),
         }
@@ -201,13 +201,13 @@ impl FlagSingle {
 
 // Map histogram, good for a family of values. Note that if the family
 // of values is known at compile-time, using a set of `Flag` instead of
-// a single `FlagMap` is both more efficient and more type-safe.
+// a single `KeyedFlag` is both more efficient and more type-safe.
 
-impl<K> FlagMap<K> where K: ToString {
-    pub fn new(feature: &Feature, meta: Metadata) -> FlagMap<K> {
+impl<K> KeyedFlag<K> where K: ToString {
+    pub fn new(feature: &Feature, meta: Metadata) -> KeyedFlag<K> {
         let storage = Box::new(FlagStorageMap { encountered: HashSet::new() });
         let key = feature.telemetry.register_keyed(meta, storage);
-        FlagMap {
+        KeyedFlag {
             back_end: BackEnd::new(feature, key),
         }
     }
@@ -234,7 +234,7 @@ impl RawStorageMap for FlagStorageMap {
     }
 }
 
-impl<K> HistogramMap<K, ()> for FlagMap<K> where K: ToString {
+impl<K> KeyedHistogram<K, ()> for KeyedFlag<K> where K: ToString {
     fn record_cb<F>(&self, cb: F) where F: FnOnce() -> Option<(K, ())>  {
         if let Some(k) = self.back_end.get_key() {
             match cb() {
@@ -256,7 +256,7 @@ impl<K> HistogramMap<K, ()> for FlagMap<K> where K: ToString {
 //
 
 
-pub type LinearSingle<T> = LinearFront<Flat, T>;
+pub type LinearSingle<T> = LinearFront<Single, T>;
 pub type LinearMap<K, T> = LinearFront<Keyed<K>, T>;
 
 struct LinearBuckets {
@@ -318,7 +318,7 @@ pub struct LinearFront<K, T> where T: Flatten {
     back_end: BackEnd<K>,
 }
 
-impl<T> Histogram<T> for LinearSingle<T> where T: Flatten {
+impl<T> SingleHistogram<T> for LinearSingle<T> where T: Flatten {
     fn record_cb<F>(&self, cb: F) where F: FnOnce() -> Option<T>  {
         if let Some(k) = self.back_end.get_key() {
             match cb() {
@@ -336,7 +336,7 @@ impl<T> LinearSingle<T> where T: Flatten {
         assert!(max - min >= buckets as u32);
         let shape = LinearBuckets { min: min, max: max, buckets: buckets };
         let storage = Box::new(LinearStorage::new(shape));
-        let key = feature.telemetry.register_flat(meta, storage);
+        let key = feature.telemetry.register_single(meta, storage);
         LinearFront {
             witness: PhantomData,
             back_end: BackEnd::new(feature, key),
@@ -402,7 +402,7 @@ impl<K, T> LinearMap<K, T> where K: ToString, T: Flatten {
     }
 }
 
-impl<K, T> HistogramMap<K, T> for LinearMap<K, T> where K: ToString, T: Flatten {
+impl<K, T> KeyedHistogram<K, T> for LinearMap<K, T> where K: ToString, T: Flatten {
     fn record_cb<F>(&self, cb: F) where F: FnOnce() -> Option<(K, T)>  {
         if let Some(k) = self.back_end.get_key() {
             match cb() {
@@ -445,14 +445,14 @@ impl Telemetry {
             let mut data = TelemetryTaskData::new();
             for msg in receiver {
                 match msg {
-                    Op::RegisterFlat(index, storage) => {
-                        data.flat.insert(index, storage);
+                    Op::RegisterSingle(index, storage) => {
+                        data.single.insert(index, storage);
                     }
                     Op::RegisterKeyed(index, storage) => {
                         data.keyed.insert(index, storage);
                     }
-                    Op::RecordFlat(index, value) => {
-                        let ref mut storage = data.flat.get_mut(&index).unwrap();
+                    Op::RecordSingle(index, value) => {
+                        let ref mut storage = data.single.get_mut(&index).unwrap();
                         storage.contents.store(value);
                     }
                     Op::RecordKeyed(index, key, value) => {
@@ -460,9 +460,9 @@ impl Telemetry {
                         storage.contents.store(key, value);
                     }
                     Op::Serialize(format, sender) => {
-                        let mut flat_object = BTreeMap::new();
-                        for ref histogram in data.flat.values() {
-                            flat_object.insert(histogram.name.clone(), histogram.contents.serialize(&format));
+                        let mut single_object = BTreeMap::new();
+                        for ref histogram in data.single.values() {
+                            single_object.insert(histogram.name.clone(), histogram.contents.serialize(&format));
                         }
 
                         let mut keyed_object = BTreeMap::new();
@@ -470,13 +470,13 @@ impl Telemetry {
                             keyed_object.insert(histogram.name.clone(), histogram.contents.serialize(&format));
                         }
 
-                        sender.send((Json::Object(flat_object), Json::Object(keyed_object))).unwrap();
+                        sender.send((Json::Object(single_object), Json::Object(keyed_object))).unwrap();
                     }
                 }
             }
         });
         Telemetry {
-            keys_flat: KeyGenerator::new(),
+            keys_single: KeyGenerator::new(),
             keys_keyed: KeyGenerator::new(),
             version: version,
             sender: sender,
@@ -487,16 +487,16 @@ impl Telemetry {
         self.sender.send(Op::Serialize(format, sender)).unwrap();
     }
 
-    fn register_flat(&self, meta: Metadata, storage: Box<RawStorage>) -> Option<Key<Flat>> {
+    fn register_single(&self, meta: Metadata, storage: Box<RawStorage>) -> Option<Key<Single>> {
         // Don't bother adding the histogram if it is expired.
         match meta.expires {
             Some(v) if v <= self.version => return None,
             _ => {}
         }
 
-        let key = self.keys_flat.next();
+        let key = self.keys_single.next();
         let named = NamedStorage { name: meta.key, contents: storage };
-        self.sender.send(Op::RegisterFlat(key.index, named)).unwrap();
+        self.sender.send(Op::RegisterSingle(key.index, named)).unwrap();
         Some(key)
     }
 
@@ -521,7 +521,7 @@ pub struct Telemetry {
 
     // A key generator for registration of new histograms. Uses atomic
     // to avoid the use of &mut.
-    keys_flat: KeyGenerator<Flat>,
+    keys_single: KeyGenerator<Single>,
     keys_keyed: KeyGenerator<Map>,
 
     // Connection to the thread holding all the storage of this
@@ -590,9 +590,9 @@ impl<K> BackEnd<K> {
     }
 }
 
-impl BackEnd<Flat> {
-    fn raw_record(&self, k: &Key<Flat>, value: u32) {
-        self.sender.send(Op::RecordFlat(k.index, value)).unwrap();
+impl BackEnd<Single> {
+    fn raw_record(&self, k: &Key<Single>, value: u32) {
+        self.sender.send(Op::RecordSingle(k.index, value)).unwrap();
     }
 }
 
@@ -618,8 +618,8 @@ impl<T> KeyGenerator<T> {
         }
     }
 }
-impl KeyGenerator<Flat> {
-    fn next(&self) -> Key<Flat> {
+impl KeyGenerator<Single> {
+    fn next(&self) -> Key<Single> {
         Key {
             index: self.counter.fetch_add(1, Ordering::Relaxed),
             witness: PhantomData
@@ -635,8 +635,8 @@ impl KeyGenerator<Map> {
     }
 }
 
-// Witness type, used to specify that the data is specific to a flat histogram.
-struct Flat;
+// Witness type, used to specify that the data is specific to a single histogram.
+struct Single;
 
 // Witness type, used to specify that the data is specific to a map histogram.
 struct Map;
@@ -661,23 +661,23 @@ type NamedStorageMap = NamedStorage<RawStorageMap>;
 
 // Operations used to communicate with the TelemetryTask.
 enum Op {
-    RegisterFlat(usize, NamedStorageSingle),
+    RegisterSingle(usize, NamedStorageSingle),
     RegisterKeyed(usize, NamedStorageMap),
-    RecordFlat(usize, u32),
+    RecordSingle(usize, u32),
     RecordKeyed(usize, String, u32),
     Serialize(SerializationFormat, Sender<(Json, Json)>),
 }
 
 
 struct TelemetryTaskData {
-    flat: VecMap<NamedStorage<RawStorage>>,
+    single: VecMap<NamedStorage<RawStorage>>,
     keyed: VecMap<NamedStorage<RawStorageMap>>
 }
 
 impl TelemetryTaskData {
     fn new() -> TelemetryTaskData {
         TelemetryTaskData {
-            flat: VecMap::new(),
+            single: VecMap::new(),
             keyed: VecMap::new()
         }
     }
@@ -702,8 +702,8 @@ mod tests {
     fn create_flags() {
         let telemetry = Arc::new(Telemetry::new([0, 0, 0, 0]));
         let feature = Feature::new(&telemetry);
-        let flag_single = FlagSingle::new(&feature, Metadata { key: "Test linear single".to_string(), expires: None});
-        let flag_map = FlagMap::new(&feature, Metadata { key: "Test flag map".to_string(), expires: None});
+        let flag_single = SingleFlag::new(&feature, Metadata { key: "Test linear single".to_string(), expires: None});
+        let flag_map = KeyedFlag::new(&feature, Metadata { key: "Test flag map".to_string(), expires: None});
 
         flag_single.record(());
         flag_map.record("key".to_string(), ());
@@ -747,16 +747,16 @@ mod tests {
 
         // A single flag that will remain untouched.
         let flag_single_1_name = "Test linear single 1".to_string();
-        let flag_single_1 = FlagSingle::new(&feature, Metadata { key: flag_single_1_name.clone(), expires: None});
+        let flag_single_1 = SingleFlag::new(&feature, Metadata { key: flag_single_1_name.clone(), expires: None});
 
         // A single flag that will be recorded once.
         let flag_single_2_name = "Test linear single 2".to_string();
-        let flag_single_2 = FlagSingle::new(&feature, Metadata { key: flag_single_2_name.clone(), expires: None});
+        let flag_single_2 = SingleFlag::new(&feature, Metadata { key: flag_single_2_name.clone(), expires: None});
         flag_single_2.record(());
 
         // A map flag.
         let flag_map_name = "Test flag map".to_string();
-        let flag_map = FlagMap::new(&feature, Metadata { key: flag_map_name.clone(), expires: None});
+        let flag_map = KeyedFlag::new(&feature, Metadata { key: flag_map_name.clone(), expires: None});
         let key1 = "key 1".to_string();
         let key2 = "key 2".to_string();
         flag_map.record(key1.clone(), ());
@@ -765,13 +765,13 @@ mod tests {
         // Serialize and check the results.
         let (sender, receiver) = channel();
         telemetry.serialize(SerializationFormat::Simple, sender);
-        let (flat, keyed) = receiver.recv().unwrap();
+        let (single, keyed) = receiver.recv().unwrap();
 
-        // Compare the flat stuff.
+        // Compare the single stuff.
         let mut all_flag_single = BTreeMap::new();
         all_flag_single.insert(flag_single_1_name.clone(), Json::Boolean(false));
         all_flag_single.insert(flag_single_2_name.clone(), Json::Boolean(true));
-        assert_eq!(flat, Json::Object(all_flag_single));
+        assert_eq!(single, Json::Object(all_flag_single));
 
         // Compare the map stuff.
         let mut all_flag_map = BTreeMap::new();
