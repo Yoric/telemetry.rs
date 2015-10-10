@@ -186,7 +186,10 @@ impl SingleHistogram<()> for SingleFlag {
         if let Some(k) = self.back_end.get_key() {
             match cb() {
                 None => {}
-                Some(()) => self.back_end.raw_record(&k, 0)
+                Some(()) => {
+                    self.cache.store(true, Ordering::Relaxed);
+                    self.back_end.raw_record(&k, 0)
+                }
             }
         }
     }
