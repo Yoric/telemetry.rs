@@ -383,6 +383,16 @@ impl<K, T> LinearMap<K, T> where K: ToString, T: Flatten<T> {
     }
 }
 
+impl<K, T> HistogramMap<K, T> for LinearMap<K, T> where K: ToString, T: Flatten<T> {
+    fn record_cb<F>(&self, cb: F) where F: FnOnce() -> Option<(K, T)>  {
+        if let Some(k) = self.back_end.get_key() {
+            match cb() {
+                None => {}
+                Some((key, v)) => self.back_end.raw_record(&k, key.to_string(), self.get_bucket(v))
+            }
+        }
+    }
+}
 
 impl Telemetry {
     /**
