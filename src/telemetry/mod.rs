@@ -181,7 +181,7 @@ impl Histogram<()> for FlagSingle {
         self.shared.with_key(|k, telemetry| {
             match cb() {
                 None => {}
-                Some(()) => telemetry.raw_record(&k, 0)
+                Some(()) => telemetry.raw_record_flat(&k, 0)
             }
         });
     }
@@ -300,7 +300,7 @@ impl<T> Histogram<T> for LinearSingle<T> where T: Flatten<T> {
         self.shared.with_key(|k, telemetry| {
             match cb() {
                 None => {}
-                Some(v) => telemetry.raw_record(&k, self.get_bucket(v))
+                Some(v) => telemetry.raw_record_flat(&k, self.get_bucket(v))
             }
         });
     }
@@ -444,18 +444,16 @@ impl Telemetry {
             _ => {}
         }
 
-        let key = self.keys_keyed.next_keyed();
+        let key = self.keys_keyed.next();
         self.sender.send(Op::RegisterKeyed(key.index, storage)).unwrap();
         Some(key)
     }
 
-    fn raw_record(&self, k: &Key<Flat>, value: u32) {
-        assert!(k.generator == &self.keys_flat);
+    fn raw_record_flat(&self, k: &Key<Flat>, value: u32) {
         self.sender.send(Op::RecordFlat(k.index, value)).unwrap();
     }
 
     fn raw_record_keyed<K>(&self, k: &Key<Keyed<K>>, key: String, value: u32) {
-        assert!(compare_ptr(k.generator, &self.keys_keyed));
         self.sender.send(Op::RecordKeyed(k.index, key, value)).unwrap();
     }
 }
@@ -471,7 +469,7 @@ pub struct Telemetry {
     // A key generator for registration of new histograms. Uses atomic
     // to avoid the use of &mut.
     keys_flat: KeyGenerator<Flat>,
-    keys_keyed: KeyGenerator<Keyed<String>>,
+    keys_keyed: KeyGenerator<Map>,
 
     // Connection to the thread holding all the storage of this
     // instance of telemetry.
@@ -536,7 +534,6 @@ impl<K> Shared<K> {
 struct Key<T> {
     witness: PhantomData<T>,
     index: usize,
-    generator: *const KeyGenerator<T>,
 }
 struct KeyGenerator<T> {
     counter: AtomicUsize,
@@ -549,26 +546,26 @@ impl<T> KeyGenerator<T> {
             witness: PhantomData,
         }
     }
-    fn next(&self) -> Key<T> {
+}
+impl KeyGenerator<Flat> {
+    fn next(&self) -> Key<Flat> {
         Key {
             index: self.counter.fetch_add(1, Ordering::Relaxed),
-            generator: self,
             witness: PhantomData
         }
     }
 }
-impl KeyGenerator<Keyed<String>> {
-    fn next_keyed<T>(&self) -> Key<Keyed<T>> {
-        let ref generator : KeyGenerator<Keyed<T>> = unsafe { transmute(self) };
+impl KeyGenerator<Map> {
+    fn next<T>(&self) -> Key<Keyed<T>> {
         Key {
             index: self.counter.fetch_add(1, Ordering::Relaxed),
-            generator: generator,
             witness: PhantomData
         }
     }
 }
 
 pub struct Flat;
+pub struct Map;
 pub struct Keyed<T> {
     witness: PhantomData<T>
 }
@@ -593,12 +590,6 @@ impl TelemetryTask {
             keyed: VecMap::new()
         }
     }
-}
-
-fn compare_ptr<A, B>(a: *const A, b: *const B) -> bool {
-    let a2 : *const () = unsafe { transmute(a) };
-    let b2 : *const () = unsafe { transmute(b) };
-    a2 == b2
 }
 
 
