@@ -14,6 +14,7 @@ use std::sync::mpsc::{channel, Sender};
 use std::thread;
 use std::mem::{size_of, transmute};
 use std::sync::Arc;
+use std::cell::Cell;
 
 //
 // Telemetry is a mechanism used to capture metrics in an application,
@@ -178,18 +179,18 @@ impl RawStorage for FlagStorage {
 
 impl Histogram<()> for FlagSingle {
     fn record_cb<F>(&self, cb: F) where F: FnOnce() -> Option<()>  {
-        self.back_end.with_key(|k, telemetry| {
+        if let Some(k) = self.back_end.get_key() {
             match cb() {
                 None => {}
-                Some(()) => telemetry.raw_record_flat(&k, 0)
+                Some(()) => self.back_end.raw_record(&k, 0)
             }
-        });
+        }
     }
 }
 
 
 impl FlagSingle {
-    pub fn new(telemetry: &Arc<Telemetry>, meta: Metadata) -> FlagSingle {
+    pub fn new(telemetry: &Telemetry, meta: Metadata) -> FlagSingle {
         let storage = Box::new(FlagStorage { encountered: false });
         let key = telemetry.register_flat(meta, storage);
         FlagFront {
@@ -203,7 +204,7 @@ impl FlagSingle {
 // a single `FlagMap` is both more efficient and more type-safe.
 
 impl<K> FlagMap<K> where K: ToString {
-    pub fn new(telemetry: &Arc<Telemetry>, meta: Metadata) -> FlagMap<K> {
+    pub fn new(telemetry: &Telemetry, meta: Metadata) -> FlagMap<K> {
         let storage = Box::new(FlagStorageMap { encountered: HashSet::new() });
         let key = telemetry.register_keyed(meta, storage);
         FlagMap {
@@ -227,12 +228,12 @@ impl RawStorageMap for FlagStorageMap {
 
 impl<K> HistogramMap<K, ()> for FlagMap<K> where K: ToString {
     fn record_cb<F>(&self, cb: F) where F: FnOnce() -> Option<(K, ())>  {
-        self.back_end.with_key(|k, telemetry| {
+        if let Some(k) = self.back_end.get_key() {
             match cb() {
                 None => {}
-                Some((key, ())) => telemetry.raw_record_keyed(k, key.to_string(), 0)
+                Some((key, ())) => self.back_end.raw_record(&k, key.to_string(), 0)
             }
-        });
+        }
     }
 }
 
@@ -297,17 +298,17 @@ impl<K, T> LinearFront<K, T> where T: Flatten<T> {
 
 impl<T> Histogram<T> for LinearSingle<T> where T: Flatten<T> {
     fn record_cb<F>(&self, cb: F) where F: FnOnce() -> Option<T>  {
-        self.back_end.with_key(|k, telemetry| {
+        if let Some(k) = self.back_end.get_key() {
             match cb() {
                 None => {}
-                Some(v) => telemetry.raw_record_flat(&k, self.get_bucket(v))
+                Some(v) => self.back_end.raw_record(&k, self.get_bucket(v))
             }
-        });
+        }
     }
 }
 
 impl<T> LinearSingle<T> where T: Flatten<T> {
-    fn new(telemetry: &Arc<Telemetry>, meta: Metadata, min: u32, max: u32, buckets: usize) -> LinearSingle<T> {
+    fn new(telemetry: &Telemetry, meta: Metadata, min: u32, max: u32, buckets: usize) -> LinearSingle<T> {
         assert!(size_of::<u32>() <= size_of::<usize>());
         assert!(min < max);
         assert!(max - min >= buckets as u32);
@@ -366,7 +367,7 @@ impl RawStorageMap for LinearStorageMap {
 
 
 impl<K, T> LinearMap<K, T> where K: ToString, T: Flatten<T> {
-    fn new(telemetry: &Arc<Telemetry>, meta: Metadata, min: u32, max: u32, buckets: usize) -> LinearMap<K, T> {
+    fn new(telemetry: &Telemetry, meta: Metadata, min: u32, max: u32, buckets: usize) -> LinearMap<K, T> {
         assert!(size_of::<u32>() <= size_of::<usize>());
         assert!(min < max);
         assert!(max - min >= buckets as u32);
@@ -421,7 +422,7 @@ impl Telemetry {
             keys_keyed: KeyGenerator::new(),
             version: version,
             sender: sender,
-            is_active: false,
+            is_active: Arc::new(Cell::new(false)),
         }
     }
 
@@ -448,14 +449,6 @@ impl Telemetry {
         self.sender.send(Op::RegisterKeyed(key.index, storage)).unwrap();
         Some(key)
     }
-
-    fn raw_record_flat(&self, k: &Key<Flat>, value: u32) {
-        self.sender.send(Op::RecordFlat(k.index, value)).unwrap();
-    }
-
-    fn raw_record_keyed<K>(&self, k: &Key<Keyed<K>>, key: String, value: u32) {
-        self.sender.send(Op::RecordKeyed(k.index, key, value)).unwrap();
-    }
 }
 
 pub struct Telemetry {
@@ -464,7 +457,7 @@ pub struct Telemetry {
     version: Version,
 
     // Has telemetry been activated? `false` by default.
-    is_active: bool,
+    is_active: Arc<Cell<bool>>,
 
     // A key generator for registration of new histograms. Uses atomic
     // to avoid the use of &mut.
@@ -502,34 +495,46 @@ struct BackEnd<K> {
     // If `false`, no data will be recorded for this histogram.
     is_active: bool,
 
-    telemetry: Arc<Telemetry>
+    sender: Sender<Op>,
+    is_telemetry_active: Arc<Cell<bool>>,
 }
 
 impl<K> BackEnd<K> {
-    fn new(telemetry: &Arc<Telemetry>, key: Option<Key<K>>) -> BackEnd<K> {
+    fn new(telemetry: &Telemetry, key: Option<Key<K>>) -> BackEnd<K> {
         BackEnd {
             key: key,
             is_active: true,
-            telemetry: telemetry.clone(),
+            sender: telemetry.sender.clone(),
+            is_telemetry_active: telemetry.is_active.clone(),
         }
     }
 
-    fn with_key<F>(&self, cb: F)
-        where F: FnOnce(&Key<K>, &Arc<Telemetry>) -> ()
+    fn get_key(&self) -> Option<&Key<K>>
     {
         if !self.is_active {
-            return;
+            return None;
         }
-        if !self.telemetry.is_active {
-            return;
+        if !self.is_telemetry_active.get() {
+            return None;
         }
         match self.key {
-            None => return,
-            Some(ref k) => cb(k, &self.telemetry)
+            None => None,
+            Some(ref k) => Some(k)
         }
     }
 }
 
+impl BackEnd<Flat> {
+    fn raw_record(&self, k: &Key<Flat>, value: u32) {
+        self.sender.send(Op::RecordFlat(k.index, value)).unwrap();
+    }
+}
+
+impl<T> BackEnd<Keyed<T>> {
+    fn raw_record(&self, k: &Key<Keyed<T>>, key: String, value: u32) {
+        self.sender.send(Op::RecordKeyed(k.index, key, value)).unwrap();
+    }
+}
 
 struct Key<T> {
     witness: PhantomData<T>,
