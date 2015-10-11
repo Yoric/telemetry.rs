@@ -500,6 +500,12 @@ impl Service {
     }
 }
 
+impl Drop for Service {
+    fn drop(&mut self) {
+        let _ = self.sender.send(Op::Terminate);
+    }
+}
+
 pub struct Service {
     // The version of the product. Some histograms may be limited to
     // specific versions of the product.

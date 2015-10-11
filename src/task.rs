@@ -31,6 +31,7 @@ pub enum Op {
     RecordSingle(usize, u32),
     RecordKeyed(usize, String, u32),
     Serialize(SerializationFormat, Sender<(Json, Json)>),
+    Terminate
 }
 
 
@@ -78,6 +79,9 @@ impl TelemetryTask {
                     }
 
                     sender.send((Json::Object(single_object), Json::Object(keyed_object))).unwrap();
+                },
+                Op::Terminate => {
+                    return;
                 }
             }
         }
