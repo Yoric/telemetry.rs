@@ -9,7 +9,7 @@
 
 use rustc_serialize::json::Json;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::collections::hash_map::Entry::{Occupied, Vacant};
 use std::marker::PhantomData;
 use std::mem::size_of;
@@ -205,7 +205,17 @@ impl KeyedRawStorage for KeyedLinearStorage {
         }
     }
     fn serialize(&self, _: &SerializationFormat) -> Json {
-        unreachable!() // FIXME: Implement
+        // Sort keys, for easier testing/comparison.
+        let mut values : Vec<_> = self.values.iter().collect();
+        values.sort();
+        // Turn everything into an object.
+        let mut tree = BTreeMap::new();
+        for value in values {
+            let (name, vec) = value;
+            let array = Json::Array(vec.iter().map(|&x| Json::I64(x as i64)).collect());
+            tree.insert(name.clone(), array);
+        }
+        Json::Object(tree)
     }
 }
 

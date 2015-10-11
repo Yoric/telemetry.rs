@@ -217,7 +217,7 @@ impl SingleRawStorage for LinearStorage {
         self.values[index] += 1;
     }
     fn serialize(&self, _: &SerializationFormat) -> Json {
-        unreachable!() // FIXME: Implement
+        Json::Array(self.values.iter().map(|&x| Json::I64(x as i64)).collect())
     }
 }
 

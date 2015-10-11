@@ -53,12 +53,12 @@ fn test_serialize_simple() {
     feature.set_active(true);
 
     // A single flag that will remain untouched.
-    let flag_single_1_name = "Test linear single 1".to_string();
+    let flag_single_1_name = "Test flag single 1".to_string();
     let flag_single_1 = single::Flag::new(&feature, flag_single_1_name.clone());
     let _ = flag_single_1; // Silence an unused variable warning.
 
     // A single flag that will be recorded once.
-    let flag_single_2_name = "Test linear single 2".to_string();
+    let flag_single_2_name = "Test flag single 2".to_string();
     let flag_single_2 = single::Flag::new(&feature, flag_single_2_name.clone());
     flag_single_2.record(());
 
@@ -72,16 +72,18 @@ fn test_serialize_simple() {
 
     // Serialize and check the results.
     let (sender, receiver) = channel();
-    telemetry.serialize(SerializationFormat::SimpleJson, sender);
+    telemetry.serialize(SerializationFormat::SimpleJson, sender.clone());
     let (single, keyed) = receiver.recv().unwrap();
 
     // Compare the single stuff.
+    // We're making sure that only our histograms appear.
     let mut all_flag_single = BTreeMap::new();
     all_flag_single.insert(flag_single_1_name.clone(), Json::I64(0));
     all_flag_single.insert(flag_single_2_name.clone(), Json::I64(1));
     assert_eq!(single, Json::Object(all_flag_single));
 
     // Compare the map stuff.
+    // We're making sure that only our histograms appear.
     let mut all_flag_map = BTreeMap::new();
     all_flag_map.insert(flag_map_name.clone(),
                         Json::Array(vec![
@@ -90,5 +92,28 @@ fn test_serialize_simple() {
                                 ]));
 
     assert_eq!(keyed, Json::Object(all_flag_map));
+
+
+    // Add a single linear histogram and fill it.
+    let linear_single_1 = single::Linear::new(&feature, "Test linear single".to_string(), 0, 100, 10);
+    linear_single_1.record(100);
+    linear_single_1.record(99);
+    linear_single_1.record(98);
+    linear_single_1.record(25);
+
+    // Add a keyed linear
+
+    // Compare stuff.
+    telemetry.serialize(SerializationFormat::SimpleJson, sender.clone());
+    let (single, keyed) = receiver.recv().unwrap();
+    if let Json::Object(single_btree) = single {
+        if let Some(&Json::Array(ref array)) = single_btree.get(&"Test linear single".to_string()) {
+            assert_eq!(*array, vec![Json::I64(0), Json::I64(0), Json::I64(1), Json::I64(0), Json::I64(0), Json::I64(0), Json::I64(0), Json::I64(0), Json::I64(0), Json::I64(3)]);
+        } else {
+            panic!("No record for the histogram");
+        }
+    } else {
+        panic!("Not a Json object");
+    }
 }
 
