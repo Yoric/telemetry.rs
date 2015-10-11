@@ -591,7 +591,7 @@ mod tests {
     use self::rustc_serialize::json::Json;
 
     use std::sync::Arc;
-    use std::sync::mpsc::{channel, Sender};
+    use std::sync::mpsc::channel;
     use std::collections::BTreeMap;
 
     use super::*;

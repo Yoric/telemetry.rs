@@ -4,7 +4,7 @@ use self::vec_map::VecMap;
 extern crate rustc_serialize;
 use self::rustc_serialize::json::Json;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::sync::mpsc::{Receiver, Sender};
 
 use misc::*;
@@ -39,6 +39,8 @@ pub struct TelemetryTask {
     single: VecMap<NamedStorage<RawStorage>>,
     keyed: VecMap<NamedStorage<RawStorageMap>>,
     receiver: Receiver<Op>,
+    // The set of all keys, used for sanity checking only.
+    keys: HashSet<String>,
 }
 
 impl TelemetryTask {
@@ -46,7 +48,8 @@ impl TelemetryTask {
         TelemetryTask {
             single: VecMap::new(),
             keyed: VecMap::new(),
-            receiver: receiver
+            receiver: receiver,
+            keys: HashSet::new(),
         }
     }
 
@@ -54,9 +57,11 @@ impl TelemetryTask {
         for msg in &self.receiver {
             match msg {
                 Op::RegisterSingle(index, storage) => {
+                    assert!(self.keys.insert(storage.name.clone()));
                     self.single.insert(index, storage);
                 }
                 Op::RegisterKeyed(index, storage) => {
+                    assert!(self.keys.insert(storage.name.clone()));
                     self.keyed.insert(index, storage);
                 }
                 Op::RecordSingle(index, value) => {
