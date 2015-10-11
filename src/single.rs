@@ -12,7 +12,7 @@ use std::marker::PhantomData;
 use std::mem::size_of;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use misc::{Flatten, LinearBuckets, Metadata, SerializationFormat, vec_with_size};
+use misc::{Flatten, LinearBuckets, SerializationFormat, vec_with_size};
 use task::{BackEnd, Op, SingleRawStorage};
 use service::{Feature, PrivateAccess};
 use indexing::*;
@@ -141,9 +141,9 @@ impl Histogram<()> for Flag {
 
 
 impl Flag {
-    pub fn new(feature: &Feature, meta: Metadata) -> Flag {
+    pub fn new(feature: &Feature, name: String) -> Flag {
         let storage = Box::new(FlagStorage { encountered: false });
-        let key = PrivateAccess::register_single(feature, meta, storage);
+        let key = PrivateAccess::register_single(feature, name, storage);
         Flag {
             back_end: BackEnd::new(feature, key),
             cache: AtomicBool::new(false),
@@ -181,13 +181,13 @@ impl<T> Histogram<T> for Linear<T> where T: Flatten {
 }
 
 impl<T> Linear<T> where T: Flatten {
-    pub fn new(feature: &Feature, meta: Metadata, min: u32, max: u32, buckets: usize) -> Linear<T> {
+    pub fn new(feature: &Feature, name: String, min: u32, max: u32, buckets: usize) -> Linear<T> {
         assert!(size_of::<u32>() <= size_of::<usize>());
         assert!(min < max);
         assert!(max - min >= buckets as u32);
         let shape = LinearBuckets { min: min, max: max, buckets: buckets };
         let storage = Box::new(LinearStorage::new(shape));
-        let key = PrivateAccess::register_single(feature, meta, storage);
+        let key = PrivateAccess::register_single(feature, name, storage);
         Linear {
             witness: PhantomData,
             back_end: BackEnd::new(feature, key),

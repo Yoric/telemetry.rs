@@ -37,7 +37,7 @@ extern crate rustc_serialize;
 
 
 mod misc;
-pub use misc::{Flatten, Metadata, SerializationFormat, Version};
+pub use misc::{Flatten, SerializationFormat, Version};
 
 mod indexing;
 

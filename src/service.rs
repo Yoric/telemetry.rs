@@ -44,7 +44,7 @@ impl Feature {
 // be activated and deactivated individually.
 //
 impl Service {
-    pub fn new(version: Version) -> Service {
+    pub fn new() -> Service {
         let (sender, receiver) = channel();
         thread::spawn(|| {
             let mut task = TelemetryTask::new(receiver);
@@ -53,7 +53,6 @@ impl Service {
         Service {
             keys_single: KeyGenerator::new(),
             keys_keyed: KeyGenerator::new(),
-            version: version,
             sender: sender,
         }
     }
@@ -62,28 +61,16 @@ impl Service {
         self.sender.send(Op::Serialize(format, sender)).unwrap();
     }
 
-    fn register_single(&self, meta: Metadata, storage: Box<SingleRawStorage>) -> Option<Key<Single>> {
-        // Don't bother adding the histogram if it is expired.
-        match meta.expires {
-            Some(v) if v <= self.version => return None,
-            _ => {}
-        }
-
+    fn register_single(&self, name: String, storage: Box<SingleRawStorage>) -> Option<Key<Single>> {
         let key = self.keys_single.next();
-        let named = NamedStorage { name: meta.key, contents: storage };
+        let named = NamedStorage { name: name, contents: storage };
         self.sender.send(Op::RegisterSingle(key.index, named)).unwrap();
         Some(key)
     }
 
-    fn register_keyed<T>(&self, meta: Metadata, storage: Box<KeyedRawStorage>) -> Option<Key<Keyed<T>>> {
-        // Don't bother adding the histogram if it is expired.
-        match meta.expires {
-            Some(v) if v <= self.version => return None,
-            _ => {}
-        }
-
+    fn register_keyed<T>(&self, name: String, storage: Box<KeyedRawStorage>) -> Option<Key<Keyed<T>>> {
         let key = self.keys_keyed.next();
-        let named = NamedStorage { name: meta.key, contents: storage };
+        let named = NamedStorage { name: name, contents: storage };
         self.sender.send(Op::RegisterKeyed(key.index, named)).unwrap();
         Some(key)
     }
@@ -96,10 +83,6 @@ impl Drop for Service {
 }
 
 pub struct Service {
-    // The version of the product. Some histograms may be limited to
-    // specific versions of the product.
-    version: Version,
-
     // A key generator for registration of new histograms. Uses atomic
     // to avoid the use of &mut.
     keys_single: KeyGenerator<Single>,
@@ -121,12 +104,12 @@ pub struct Feature {
 pub struct PrivateAccess;
 
 impl PrivateAccess {
-    pub fn register_single(feature: &Feature, meta: Metadata, storage: Box<SingleRawStorage>) -> Option<Key<Single>> {
-        feature.service.register_single(meta, storage)
+    pub fn register_single(feature: &Feature, name: String, storage: Box<SingleRawStorage>) -> Option<Key<Single>> {
+        feature.service.register_single(name, storage)
     }
 
-    pub fn register_keyed<T>(feature: &Feature, meta: Metadata, storage: Box<KeyedRawStorage>) -> Option<Key<Keyed<T>>> {
-        feature.service.register_keyed(meta, storage)
+    pub fn register_keyed<T>(feature: &Feature, name: String, storage: Box<KeyedRawStorage>) -> Option<Key<Keyed<T>>> {
+        feature.service.register_keyed(name, storage)
     }
 
     pub fn get_sender(feature: &Feature) -> &Sender<Op> {

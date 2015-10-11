@@ -25,21 +25,6 @@ pub enum SerializationFormat {
 pub type Version = [u32;4];
 
 ///
-/// Metadata on a histogram.
-///
-pub struct Metadata {
-    /// A key used to identify the histogram. Must be unique to the
-    /// instance of `telemetry`.
-    pub key: String,
-
-    /// Optionally, a version of the product at which this histogram
-    /// expires. If the version of the current product is at least as
-    /// recent as `expires`, nothing will be recorded for the
-    /// histogram, and no memory will be used.
-    pub expires: Option<Version>,
-}
-
-///
 /// A value that can be represented as a u32.
 ///
 pub trait Flatten {

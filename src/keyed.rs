@@ -14,7 +14,7 @@ use std::collections::hash_map::Entry::{Occupied, Vacant};
 use std::marker::PhantomData;
 use std::mem::size_of;
 
-use misc::{Flatten, LinearBuckets, Metadata, SerializationFormat, vec_with_size};
+use misc::{Flatten, LinearBuckets, SerializationFormat, vec_with_size};
 use task::{BackEnd, Op, KeyedRawStorage};
 use service::{Feature, PrivateAccess};
 use indexing::*;
@@ -104,9 +104,9 @@ pub struct KeyedFlag<T> {
 
 
 impl<K> KeyedFlag<K> where K: ToString {
-    pub fn new(feature: &Feature, meta: Metadata) -> KeyedFlag<K> {
+    pub fn new(feature: &Feature, name: String) -> KeyedFlag<K> {
         let storage = Box::new(KeyedFlagStorage { encountered: HashSet::new() });
-        let key = PrivateAccess::register_keyed(feature, meta, storage);
+        let key = PrivateAccess::register_keyed(feature, name, storage);
         KeyedFlag {
             back_end: BackEnd::new(feature, key),
         }
@@ -211,13 +211,13 @@ impl KeyedRawStorage for KeyedLinearStorage {
 
 
 impl<K, T> KeyedLinear<K, T> where K: ToString, T: Flatten {
-    pub fn new(feature: &Feature, meta: Metadata, min: u32, max: u32, buckets: usize) -> KeyedLinear<K, T> {
+    pub fn new(feature: &Feature, name: String, min: u32, max: u32, buckets: usize) -> KeyedLinear<K, T> {
         assert!(size_of::<u32>() <= size_of::<usize>());
         assert!(min < max);
         assert!(max - min >= buckets as u32);
         let shape = KeyedLinearBuckets { min: min, max: max, buckets: buckets };
         let storage = Box::new(KeyedLinearStorage::new(shape));
-        let key = PrivateAccess::register_keyed(feature, meta, storage);
+        let key = PrivateAccess::register_keyed(feature, name, storage);
         KeyedLinear {
             witness: PhantomData,
             back_end: BackEnd::new(feature, key),
