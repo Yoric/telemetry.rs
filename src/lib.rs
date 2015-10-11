@@ -8,13 +8,20 @@ use std::marker::PhantomData;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::collections::hash_map::Entry::{Occupied, Vacant};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::mpsc::{channel, Sender, Receiver};
 use std::thread;
 use std::mem::size_of;
 use std::sync::Arc;
 use std::cell::Cell;
+
+mod misc;
+pub use misc::SerializationFormat;
+use misc::{NamedStorage};
+
+mod indexing;
+use indexing::*;
 
 // Telemetry is a mechanism used to capture metrics in an application,
 // to later store the data locally or upload it to a server for
@@ -119,7 +126,6 @@ pub trait KeyedHistogram<K, T> {
     //
     fn record_cb<F>(&self, _: F) where F: FnOnce() -> Option<(K, T)>;
 }
-
 
 pub trait Flatten {
     fn as_u32(&self) -> u32;
@@ -264,9 +270,6 @@ impl<K> KeyedHistogram<K, ()> for KeyedFlag<K> where K: ToString {
 //
 
 
-pub type LinearSingle<T> = LinearFront<Single, T>;
-pub type LinearMap<K, T> = LinearFront<Keyed<K>, T>;
-
 struct LinearBuckets {
     min: u32,
     max: u32, // Invariant: max > min
@@ -321,12 +324,17 @@ impl RawStorage for LinearStorage {
     }
 }
 
-pub struct LinearFront<K, T> where T: Flatten {
+pub struct KeyedLinear<K, T> where T: Flatten {
     witness: PhantomData<T>,
-    back_end: BackEnd<K>,
+    back_end: BackEnd<indexing::Keyed<K>>,
 }
 
-impl<T> SingleHistogram<T> for LinearSingle<T> where T: Flatten {
+pub struct SingleLinear<T> where T: Flatten {
+    witness: PhantomData<T>,
+    back_end: BackEnd<indexing::Single>,
+}
+
+impl<T> SingleHistogram<T> for SingleLinear<T> where T: Flatten {
     fn record_cb<F>(&self, cb: F) where F: FnOnce() -> Option<T>  {
         if let Some(k) = self.back_end.get_key() {
             match cb() {
@@ -337,15 +345,15 @@ impl<T> SingleHistogram<T> for LinearSingle<T> where T: Flatten {
     }
 }
 
-impl<T> LinearSingle<T> where T: Flatten {
-    fn new(feature: &Feature, meta: Metadata, min: u32, max: u32, buckets: usize) -> LinearSingle<T> {
+impl<T> SingleLinear<T> where T: Flatten {
+    pub fn new(feature: &Feature, meta: Metadata, min: u32, max: u32, buckets: usize) -> SingleLinear<T> {
         assert!(size_of::<u32>() <= size_of::<usize>());
         assert!(min < max);
         assert!(max - min >= buckets as u32);
         let shape = LinearBuckets { min: min, max: max, buckets: buckets };
         let storage = Box::new(LinearStorage::new(shape));
         let key = feature.telemetry.register_single(meta, storage);
-        LinearFront {
+        SingleLinear {
             witness: PhantomData,
             back_end: BackEnd::new(feature, key),
         }
@@ -395,22 +403,22 @@ impl RawStorageMap for LinearStorageMap {
 }
 
 
-impl<K, T> LinearMap<K, T> where K: ToString, T: Flatten {
-    fn new(feature: &Feature, meta: Metadata, min: u32, max: u32, buckets: usize) -> LinearMap<K, T> {
+impl<K, T> KeyedLinear<K, T> where K: ToString, T: Flatten {
+    pub fn new(feature: &Feature, meta: Metadata, min: u32, max: u32, buckets: usize) -> KeyedLinear<K, T> {
         assert!(size_of::<u32>() <= size_of::<usize>());
         assert!(min < max);
         assert!(max - min >= buckets as u32);
         let shape = LinearBuckets { min: min, max: max, buckets: buckets };
         let storage = Box::new(LinearStorageMap::new(shape));
         let key = feature.telemetry.register_keyed(meta, storage);
-        LinearFront {
+        KeyedLinear {
             witness: PhantomData,
             back_end: BackEnd::new(feature, key),
         }
     }
 }
 
-impl<K, T> KeyedHistogram<K, T> for LinearMap<K, T> where K: ToString, T: Flatten {
+impl<K, T> KeyedHistogram<K, T> for KeyedLinear<K, T> where K: ToString, T: Flatten {
     fn record_cb<F>(&self, cb: F) where F: FnOnce() -> Option<(K, T)>  {
         if let Some(k) = self.back_end.get_key() {
             match cb() {
@@ -454,8 +462,8 @@ impl Service {
             task.run()
         });
         Service {
-            keys_single: KeyGenerator::new(),
-            keys_keyed: KeyGenerator::new(),
+            keys_single: indexing::KeyGenerator::new(),
+            keys_keyed: indexing::KeyGenerator::new(),
             version: version,
             sender: sender,
         }
@@ -465,7 +473,7 @@ impl Service {
         self.sender.send(Op::Serialize(format, sender)).unwrap();
     }
 
-    fn register_single(&self, meta: Metadata, storage: Box<RawStorage>) -> Option<Key<Single>> {
+    fn register_single(&self, meta: Metadata, storage: Box<RawStorage>) -> Option<indexing::Key<Single>> {
         // Don't bother adding the histogram if it is expired.
         match meta.expires {
             Some(v) if v <= self.version => return None,
@@ -478,7 +486,7 @@ impl Service {
         Some(key)
     }
 
-    fn register_keyed<T>(&self, meta: Metadata, storage: Box<RawStorageMap>) -> Option<Key<Keyed<T>>> {
+    fn register_keyed<T>(&self, meta: Metadata, storage: Box<RawStorageMap>) -> Option<indexing::Key<Keyed<T>>> {
         // Don't bother adding the histogram if it is expired.
         match meta.expires {
             Some(v) if v <= self.version => return None,
@@ -499,8 +507,8 @@ pub struct Service {
 
     // A key generator for registration of new histograms. Uses atomic
     // to avoid the use of &mut.
-    keys_single: KeyGenerator<Single>,
-    keys_keyed: KeyGenerator<Map>,
+    keys_single: indexing::KeyGenerator<Single>,
+    keys_keyed: indexing::KeyGenerator<Map>,
 
     // Connection to the thread holding all the storage of this
     // instance of telemetry.
@@ -533,7 +541,7 @@ struct BackEnd<K> {
     // A key used to map a histogram to its storage owned by telemetry,
     // or None if the histogram has been rejected by telemetry because
     // it has expired.
-    key: Option<Key<K>>,
+    key: Option<indexing::Key<K>>,
 
     // `true` unless the histogram has been deactivated by user request.
     // If `false`, no data will be recorded for this histogram.
@@ -544,7 +552,7 @@ struct BackEnd<K> {
 }
 
 impl<K> BackEnd<K> {
-    fn new(feature: &Feature, key: Option<Key<K>>) -> BackEnd<K> {
+    fn new(feature: &Feature, key: Option<indexing::Key<K>>) -> BackEnd<K> {
         BackEnd {
             key: key,
             is_active: true,
@@ -553,7 +561,7 @@ impl<K> BackEnd<K> {
         }
     }
 
-    fn get_key(&self) -> Option<&Key<K>>
+    fn get_key(&self) -> Option<&indexing::Key<K>>
     {
         if !self.is_active {
             return None;
@@ -569,69 +577,15 @@ impl<K> BackEnd<K> {
 }
 
 impl BackEnd<Single> {
-    fn raw_record(&self, k: &Key<Single>, value: u32) {
+    fn raw_record(&self, k: &indexing::Key<Single>, value: u32) {
         self.sender.send(Op::RecordSingle(k.index, value)).unwrap();
     }
 }
 
 impl<T> BackEnd<Keyed<T>> {
-    fn raw_record(&self, k: &Key<Keyed<T>>, key: String, value: u32) {
+    fn raw_record(&self, k: &indexing::Key<Keyed<T>>, key: String, value: u32) {
         self.sender.send(Op::RecordKeyed(k.index, key, value)).unwrap();
     }
-}
-
-struct Key<T> {
-    witness: PhantomData<T>,
-    index: usize,
-}
-struct KeyGenerator<T> {
-    counter: AtomicUsize,
-    witness: PhantomData<T>,
-}
-impl<T> KeyGenerator<T> {
-    fn new() -> KeyGenerator<T> {
-        KeyGenerator {
-            counter: AtomicUsize::new(0),
-            witness: PhantomData,
-        }
-    }
-}
-impl KeyGenerator<Single> {
-    fn next(&self) -> Key<Single> {
-        Key {
-            index: self.counter.fetch_add(1, Ordering::Relaxed),
-            witness: PhantomData
-        }
-    }
-}
-impl KeyGenerator<Map> {
-    fn next<T>(&self) -> Key<Keyed<T>> {
-        Key {
-            index: self.counter.fetch_add(1, Ordering::Relaxed),
-            witness: PhantomData
-        }
-    }
-}
-
-// Witness type, used to specify that the data is specific to a single histogram.
-struct Single;
-
-// Witness type, used to specify that the data is specific to a map histogram.
-struct Map;
-
-// Witness type, used to specify that the data is specific to a map
-// histogram with keys of a specific type `T`.
-struct Keyed<T> {
-    witness: PhantomData<T>
-}
-
-pub enum SerializationFormat {
-    Simple,
-}
-
-struct NamedStorage<T: ?Sized> {
-    name: String,
-    contents: Box<T>,
 }
 
 type NamedStorageSingle = NamedStorage<RawStorage>;
@@ -731,13 +685,13 @@ mod tests {
         let telemetry = Arc::new(Service::new([0, 0, 0, 0]));
         let feature = Feature::new(&telemetry);
         let linear_single =
-            LinearSingle::new(&feature,
+            SingleLinear::new(&feature,
                               Metadata {
                                   key: "Test linear single".to_string(),
                                   expires: None
                               }, 0, 100, 10);
         let linear_map =
-            LinearMap::new(&feature,
+            KeyedLinear::new(&feature,
                               Metadata {
                                   key: "Test linear map".to_string(),
                                   expires: None
