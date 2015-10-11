@@ -1,16 +1,13 @@
 extern crate rustc_serialize;
 use self::rustc_serialize::json::Json;
 
-extern crate vec_map;
-use self::vec_map::VecMap;
-
 use std::marker::PhantomData;
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::collections::hash_map::Entry::{Occupied, Vacant};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::atomic::Ordering::Relaxed;
-use std::sync::mpsc::{channel, Sender, Receiver};
+use std::sync::mpsc::{channel, Sender};
 use std::thread;
 use std::mem::size_of;
 use std::sync::Arc;
@@ -22,6 +19,9 @@ use misc::{NamedStorage};
 
 mod indexing;
 use indexing::*;
+
+mod task;
+use task::{Op, RawStorage, RawStorageMap, TelemetryTask};
 
 // Telemetry is a mechanism used to capture metrics in an application,
 // to later store the data locally or upload it to a server for
@@ -175,7 +175,7 @@ impl RawStorage for SingleFlagStorage {
     }
     fn serialize(&self, format: &SerializationFormat) -> Json {
         match format {
-            Simple => {
+            &SerializationFormat::Simple => {
                 Json::Boolean(self.encountered)
             }
         }
@@ -237,7 +237,7 @@ impl RawStorageMap for KeyedFlagStorage {
     }
     fn serialize(&self, format: &SerializationFormat) -> Json {
         match format {
-            Simple => {
+            &SerializationFormat::Simple => {
                 let mut keys = Vec::with_capacity(self.encountered.len());
                 for key in &self.encountered {
                     keys.push(Json::String(key.clone())) // FIXME: Why do I need to copy a String for this?
@@ -319,7 +319,7 @@ impl RawStorage for LinearStorage {
         let index = self.shape.get_bucket(value);
         self.values[index] += 1;
     }
-    fn serialize(&self, format: &SerializationFormat) -> Json {
+    fn serialize(&self, _: &SerializationFormat) -> Json {
         unreachable!() // FIXME: Implement
     }
 }
@@ -397,7 +397,7 @@ impl RawStorageMap for LinearStorageMap {
             }
         }
     }
-    fn serialize(&self, format: &SerializationFormat) -> Json {
+    fn serialize(&self, _: &SerializationFormat) -> Json {
         unreachable!() // FIXME: Implement
     }
 }
@@ -523,18 +523,6 @@ pub struct Feature {
 }
 
 //
-// Low-level, untyped, implementation of histogram storage.
-//
-trait RawStorage: Send {
-    fn store(&mut self, value: u32);
-    fn serialize(&self, &SerializationFormat) -> Json;
-}
-trait RawStorageMap: Send {
-    fn store(&mut self, key: String, value: u32);
-    fn serialize(&self, format: &SerializationFormat) -> Json;
-}
-
-//
 // Features shared by all histograms
 //
 struct BackEnd<K> {
@@ -588,68 +576,6 @@ impl<T> BackEnd<Keyed<T>> {
     }
 }
 
-type NamedStorageSingle = NamedStorage<RawStorage>;
-type NamedStorageMap = NamedStorage<RawStorageMap>;
-
-// Operations used to communicate with the TelemetryTask.
-enum Op {
-    RegisterSingle(usize, NamedStorageSingle),
-    RegisterKeyed(usize, NamedStorageMap),
-    RecordSingle(usize, u32),
-    RecordKeyed(usize, String, u32),
-    Serialize(SerializationFormat, Sender<(Json, Json)>),
-}
-
-
-struct TelemetryTask {
-    single: VecMap<NamedStorage<RawStorage>>,
-    keyed: VecMap<NamedStorage<RawStorageMap>>,
-    receiver: Receiver<Op>,
-}
-
-impl TelemetryTask {
-    fn new(receiver: Receiver<Op>) -> TelemetryTask {
-        TelemetryTask {
-            single: VecMap::new(),
-            keyed: VecMap::new(),
-            receiver: receiver
-        }
-    }
-
-    fn run(&mut self) {
-        for msg in &self.receiver {
-            match msg {
-                Op::RegisterSingle(index, storage) => {
-                    self.single.insert(index, storage);
-                }
-                Op::RegisterKeyed(index, storage) => {
-                    self.keyed.insert(index, storage);
-                }
-                Op::RecordSingle(index, value) => {
-                    let ref mut storage = self.single.get_mut(&index).unwrap();
-                    storage.contents.store(value);
-                }
-                Op::RecordKeyed(index, key, value) => {
-                    let ref mut storage = self.keyed.get_mut(&index).unwrap();
-                    storage.contents.store(key, value);
-                }
-                Op::Serialize(format, sender) => {
-                    let mut single_object = BTreeMap::new();
-                    for ref histogram in self.single.values() {
-                        single_object.insert(histogram.name.clone(), histogram.contents.serialize(&format));
-                    }
-
-                    let mut keyed_object = BTreeMap::new();
-                    for ref histogram in self.keyed.values() {
-                        keyed_object.insert(histogram.name.clone(), histogram.contents.serialize(&format));
-                    }
-
-                    sender.send((Json::Object(single_object), Json::Object(keyed_object))).unwrap();
-                }
-            }
-        }
-    }
-}
 
 //////////////////////////////////// Tests
 
