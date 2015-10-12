@@ -37,18 +37,38 @@ extern crate rustc_serialize;
 
 
 mod misc;
-pub use misc::{Flatten, SerializationFormat, Subset};
+
+/// Data that may be converted to numbers for storage in a histogram.
+pub use misc::Flatten;
+
+/// A serialization format, as a subset of Json.
+pub use misc::SerializationFormat;
+
+/// A subset of data to export.
+pub use misc::Subset;
 
 mod indexing;
 
 mod task;
 
+/// Definition of plain histograms, for data in a set known at compile-time.
 pub mod plain;
-pub mod keyed;
-mod service;
-pub use service::Service;
-pub use keyed::KeyedHistogram;
+
+/// Plain histograms.
 pub use plain::Histogram;
+
+/// Definition of keyed histograms, for data in a set known dynamically.
+pub mod keyed;
+
+/// Keyed histograms.
+pub use keyed::KeyedHistogram;
+
+mod service;
+
+/// The Telemetry Service. You need one (or more) per application.
+pub use service::Service;
+
+
 
 
 

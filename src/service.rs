@@ -13,6 +13,12 @@ use indexing::*;
 ///
 /// The Telemetry service.
 ///
+/// The service is in charge of maintaining the data recorded by the
+/// histograms. Each application using telemetry needs one instance of
+/// the service (or more, but this should seldom be necessary). The
+/// data is stored and processed in a dedicated background thread and
+/// the memory is recollected only when the service is dropped.
+///
 /// # Panics
 ///
 /// The service will panic if an attempt is made to register two
@@ -79,8 +85,9 @@ impl Service {
     }
 }
 
+/// Upon death of the service, terminate the thread and recollect all
+/// owned memory.
 impl Drop for Service {
-    /// Terminate the thread once the service is dead.
     fn drop(&mut self) {
         let _ = self.sender.send(Op::Terminate);
     }
