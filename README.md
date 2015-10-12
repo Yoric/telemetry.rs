@@ -10,6 +10,10 @@ Examples of usage:
 - determining the amount of I/O performed by the application;
 - ...
 
-The main abstraction used by this library is the Histogram. Each Histogram serves to capture a specific measurement, store it locally and/or upload it to the server. Several types of Histograms are provided, suited to distinct kinds of measures.
+The main abstraction used by this library is the Histogram. Each
+Histogram serves to capture a specific measurement. Measurements can
+then be exported, so that applications can save them to disk or upload
+them to a server. Several types of Histograms are provided, suited to
+distinct kinds of measures.
 
 API documentation may be found [here](http://yoric.github.io/telemetry.rs/target/doc/telemetry/).

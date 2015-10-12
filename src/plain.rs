@@ -14,21 +14,18 @@ use std::mem::size_of;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use misc::{Flatten, LinearBuckets, SerializationFormat, vec_with_size};
-use task::{BackEnd, Op, SingleRawStorage};
+use task::{BackEnd, Op, PlainRawStorage};
 use service::{Service, PrivateAccess};
 use indexing::*;
 
 ///
-/// A single histogram.
+/// A plain histogram.
 ///
 pub trait Histogram<T> {
     ///
     /// Record a value in this histogram.
     ///
-    /// The value is recorded only if all of the following conditions are met:
-    /// - telemetry is activated; and
-    /// - this histogram has not expired; and
-    /// - the histogram is active.
+    /// If the service is currently inactive, this is a noop.
     ///
     fn record(&self, value: T) {
         self.record_cb(|| Some(value))
@@ -37,24 +34,24 @@ pub trait Histogram<T> {
     ///
     /// Record a value in this histogram, as provided by a callback.
     ///
-    /// The callback is triggered only if all of the following conditions are met:
-    /// - telemetry is activated; and
-    /// - this histogram has not expired; and
-    /// - the histogram is active.
+    /// If the service is currently inactive, this is a noop.
     ///
     /// If the callback returns `None`, no value is recorded.
     ///
     fn record_cb<F>(&self, _: F) where F: FnOnce() -> Option<T>;
 }
 
-// Back-end features specific to single histograms.
-impl BackEnd<Single> {
-    // Instruct the Telemetry Task to record a single value in an
-    // already registered histogram.
-    fn raw_record(&self, k: &Key<Single>, value: u32) {
-        self.sender.send(Op::RecordSingle(k.index, value)).unwrap();
+
+/// Back-end features specific to plain histograms.
+impl BackEnd<Plain> {
+    /// Instruct the Telemetry Task to record a value in an
+    /// already registered histogram.
+    fn raw_record(&self, k: &Key<Plain>, value: u32) {
+        self.sender.send(Op::RecordPlain(k.index, value)).unwrap();
     }
 
+    /// Instruct the Telemetry Task to record the result of a callback
+    /// in an already registered histogram.
     fn raw_record_cb<F, T>(&self, cb: F) -> bool where F: FnOnce() -> Option<T>, T: Flatten {
         if let Some(k) = self.get_key() {
             if let Some(v) = cb() {
@@ -106,22 +103,22 @@ impl<T> Histogram<T> for Ignoring<T> {
 ///
 ///
 /// With `SerializationFormat::SimpleJson`, these histograms are
-/// serialized as a single number 0 (unset)/1 (set).
+/// serialized as a plain number 0 (unset)/1 (set).
 ///
 pub struct Flag {
-    back_end: BackEnd<Single>,
+    back_end: BackEnd<Plain>,
 
-    // A cache used to avoid spamming the Task once the flag has been set.
+    /// A cache used to avoid spamming the Task once the flag has been set.
     cache: AtomicBool,
 }
 
-// The storage, owned by the Telemetry Task.
+/// The storage, owned by the Telemetry Task.
 struct FlagStorage {
-    // `true` once we have called `record`, `false` until then.
+    /// `true` once we have called `record`, `false` until then.
     encountered: bool
 }
 
-impl SingleRawStorage for FlagStorage {
+impl PlainRawStorage for FlagStorage {
     fn store(&mut self, _: u32) {
         self.encountered = true;
     }
@@ -151,7 +148,7 @@ impl Histogram<()> for Flag {
 impl Flag {
     pub fn new(feature: &Service, name: String) -> Flag {
         let storage = Box::new(FlagStorage { encountered: false });
-        let key = PrivateAccess::register_single(feature, name, storage);
+        let key = PrivateAccess::register_plain(feature, name, storage);
         Flag {
             back_end: BackEnd::new(feature, key),
             cache: AtomicBool::new(false),
@@ -174,7 +171,7 @@ impl Flag {
 /// order of buckets.
 pub struct Linear<T> where T: Flatten {
     witness: PhantomData<T>,
-    back_end: BackEnd<Single>,
+    back_end: BackEnd<Plain>,
 }
 
 impl<T> Histogram<T> for Linear<T> where T: Flatten {
@@ -190,7 +187,7 @@ impl<T> Linear<T> where T: Flatten {
         assert!(max - min >= buckets as u32);
         let shape = LinearBuckets::new(min, max, buckets);
         let storage = Box::new(LinearStorage::new(shape));
-        let key = PrivateAccess::register_single(feature, name, storage);
+        let key = PrivateAccess::register_plain(feature, name, storage);
         Linear {
             witness: PhantomData,
             back_end: BackEnd::new(feature, key),
@@ -214,7 +211,7 @@ impl LinearStorage {
     }
 }
 
-impl SingleRawStorage for LinearStorage {
+impl PlainRawStorage for LinearStorage {
     fn store(&mut self, value: u32) {
         let index = self.shape.get_bucket(value);
         self.values[index] += 1;
@@ -235,10 +232,10 @@ impl SingleRawStorage for LinearStorage {
 ///
 ///
 /// With `SerializationFormat::SimpleJson`, these histograms are
-/// serialized as a single number.
+/// serialized as a plain number.
 ///
 pub struct Count {
-    back_end: BackEnd<Single>,
+    back_end: BackEnd<Plain>,
 }
 
 // The storage, owned by the Telemetry Task.
@@ -246,7 +243,7 @@ struct CountStorage {
     value: u32
 }
 
-impl SingleRawStorage for CountStorage {
+impl PlainRawStorage for CountStorage {
     fn store(&mut self, value: u32) {
         self.value += value;
     }
@@ -269,7 +266,7 @@ impl Histogram<u32> for Count {
 impl Count {
     pub fn new(feature: &Service, name: String) -> Count {
         let storage = Box::new(CountStorage { value: 0 });
-        let key = PrivateAccess::register_single(feature, name, storage);
+        let key = PrivateAccess::register_plain(feature, name, storage);
         Count {
             back_end: BackEnd::new(feature, key),
         }
@@ -293,7 +290,7 @@ impl Count {
 ///
 pub struct Enum<K> where K: Flatten {
     witness: PhantomData<K>,
-    back_end: BackEnd<Single>,
+    back_end: BackEnd<Plain>,
 }
 
 // The storage, owned by the Telemetry Task.
@@ -301,7 +298,7 @@ struct EnumStorage {
     values: Vec<u32>
 }
 
-impl SingleRawStorage for EnumStorage {
+impl PlainRawStorage for EnumStorage {
     fn store(&mut self, value: u32) {
         self.values[value as usize] += 1;
     }
@@ -324,7 +321,7 @@ impl<K> Histogram<K> for Enum<K> where K: Flatten {
 impl<K> Enum<K> where K: Flatten {
     pub fn new(feature: &Service, name: String, buckets: usize) -> Enum<K> {
         let storage = Box::new(EnumStorage { values: vec_with_size(buckets, 0) });
-        let key = PrivateAccess::register_single(feature, name, storage);
+        let key = PrivateAccess::register_plain(feature, name, storage);
         Enum {
             witness: PhantomData,
             back_end: BackEnd::new(feature, key),

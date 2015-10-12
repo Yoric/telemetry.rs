@@ -1,3 +1,11 @@
+//!
+//! The dedicated telemetry thread and everything it owns.
+//!
+//! The thread is launched upon creation of `Service`, owned by it and
+//! shutdown when the `Service` is dropped. This thread owns all the
+//! storage for the histograms. Communication takes place through a
+//! `channel`.
+
 extern crate vec_map;
 use self::vec_map::VecMap;
 
@@ -14,61 +22,86 @@ use misc::*;
 use service::{PrivateAccess, Service};
 
 
-//
-// Low-level, untyped, implementation of histogram storage.
-//
-pub trait SingleRawStorage: Send {
+///
+/// Low-level, untyped, implementation of plain histogram storage.
+///
+pub trait PlainRawStorage: Send {
     fn store(&mut self, value: u32);
     fn to_json(&self, &SerializationFormat) -> Json;
 }
+
+///
+/// Low-level, untyped, implementation of keyed histogram storage.
+///
 pub trait KeyedRawStorage: Send {
     fn store(&mut self, key: String, value: u32);
     fn to_json(&self, format: &SerializationFormat) -> Json;
 }
 
 
-// Operations used to communicate with the TelemetryTask.
+/// Operations used to communicate with the TelemetryTask.
 pub enum Op {
-    RegisterSingle(usize, NamedStorage<SingleRawStorage>),
+    /// `RegisterPlain(key, storage)` returns a plain histogram with
+    /// key `key`. The key must be previously unused, otherwise panic.
+    /// Unicity of the key is enforced through the use of a
+    /// [KeyGenerator](../misc/struct.KeyGenerator.html).
+    RegisterPlain(usize, NamedStorage<PlainRawStorage>),
+
+    /// `RegisterPlain(key, storage)` returns a plain histogram with
+    /// key `key`. The key must be previously unused, otherwise panic.
+    /// Unicity of the key is enforced through the use of a
+    /// [KeyGenerator](../misc/struct.KeyGenerator.html).
     RegisterKeyed(usize, NamedStorage<KeyedRawStorage>),
-    RecordSingle(usize, u32),
+
+    /// `RecordPlain(key, value)` records value `value` in the plain
+    /// histogram registered with key `key`.` The key must be
+    /// registered to a plain histogram, otherwise panic.
+    RecordPlain(usize, u32),
+
+    /// `RecordKeyed(key, userkey, value)` records value `(userkey,
+    /// value)` in the plain histogram registered with histogram key
+    /// `key`.` The key must be registered to a plain histogram,
+    /// otherwise panic.
     RecordKeyed(usize, String, u32),
+
+    /// Proceed to serialization of the histogram in a given format.
+    /// Returns a pair (plain histograms, keyed histograms).
     Serialize(SerializationFormat, Sender<(Json, Json)>),
+
+    /// Terminate the thread immediately. Any further attempt to
+    /// communicate with the tread will panic.
     Terminate
 }
 
-
-pub struct TelemetryTask {
-    single: VecMap<NamedStorage<SingleRawStorage>>,
-    keyed: VecMap<NamedStorage<KeyedRawStorage>>,
-    receiver: Receiver<Op>,
-    // The set of all keys, used for sanity checking only.
-    keys: HashSet<String>,
-}
-
+///
+/// The thread responsible for storing, bucketing and serializing data.
+///
 impl TelemetryTask {
+    /// Create a new thread listening on a given channel.
     pub fn new(receiver: Receiver<Op>) -> TelemetryTask {
         TelemetryTask {
-            single: VecMap::new(),
+            plain: VecMap::new(),
             keyed: VecMap::new(),
             receiver: receiver,
             keys: HashSet::new(),
         }
     }
 
+    /// Code executed by the thread.
+    /// This thread runs until it receives message `Terminate`.
     pub fn run(&mut self) {
         for msg in &self.receiver {
             match msg {
-                Op::RegisterSingle(index, storage) => {
+                Op::RegisterPlain(index, storage) => {
                     assert!(self.keys.insert(storage.name.clone()));
-                    self.single.insert(index, storage);
+                    self.plain.insert(index, storage);
                 }
                 Op::RegisterKeyed(index, storage) => {
                     assert!(self.keys.insert(storage.name.clone()));
                     self.keyed.insert(index, storage);
                 }
-                Op::RecordSingle(index, value) => {
-                    let ref mut storage = self.single.get_mut(&index).unwrap();
+                Op::RecordPlain(index, value) => {
+                    let ref mut storage = self.plain.get_mut(&index).unwrap();
                     storage.contents.store(value);
                 }
                 Op::RecordKeyed(index, key, value) => {
@@ -76,9 +109,9 @@ impl TelemetryTask {
                     storage.contents.store(key, value);
                 }
                 Op::Serialize(format, sender) => {
-                    let mut single_object = BTreeMap::new();
-                    for ref histogram in self.single.values() {
-                        single_object.insert(histogram.name.clone(), histogram.contents.to_json(&format));
+                    let mut plain_object = BTreeMap::new();
+                    for ref histogram in self.plain.values() {
+                        plain_object.insert(histogram.name.clone(), histogram.contents.to_json(&format));
                     }
 
                     let mut keyed_object = BTreeMap::new();
@@ -86,7 +119,7 @@ impl TelemetryTask {
                         keyed_object.insert(histogram.name.clone(), histogram.contents.to_json(&format));
                     }
 
-                    sender.send((Json::Object(single_object), Json::Object(keyed_object))).unwrap();
+                    sender.send((Json::Object(plain_object), Json::Object(keyed_object))).unwrap();
                 },
                 Op::Terminate => {
                     return;
@@ -96,17 +129,29 @@ impl TelemetryTask {
     }
 }
 
+pub struct TelemetryTask {
+    /// Plain histograms.
+    plain: VecMap<NamedStorage<PlainRawStorage>>,
 
-//
-// Features shared by all histograms
-//
-pub struct BackEnd<K> {
-    key: Key<K>,
-    is_active: Arc<Cell<bool>>,
-    pub sender: Sender<Op>,
+    /// Keyed histograms.
+    keyed: VecMap<NamedStorage<KeyedRawStorage>>,
+
+    /// The channel used by the task to receive data.
+    receiver: Receiver<Op>,
+
+    /// The set of all histogram names, used for sanity checking only.
+    keys: HashSet<String>,
 }
 
+
+///
+/// Features shared by all histograms
+///
+/// `K` is the kind of user keys, either `Plain` for a plain
+/// histogram or `Keyed<T>` for a keyed histogram with user keys of
+/// type `T`.
 impl<K> BackEnd<K> {
+    /// Create a new back-end attached to a service and a key.
     pub fn new(service: &Service, key: Key<K>) -> BackEnd<K> {
         BackEnd {
             key: key,
@@ -115,6 +160,7 @@ impl<K> BackEnd<K> {
         }
     }
 
+    /// Get the key _if_ the service is currently active.
     pub fn get_key(&self) -> Option<&Key<K>> {
         if self.is_active.get() {
             Some(&self.key)
@@ -122,4 +168,15 @@ impl<K> BackEnd<K> {
             None
         }
     }
+}
+
+pub struct BackEnd<K> {
+    /// The key used to communicate with the `TelemetryTask`.
+    key: Key<K>,
+
+    /// The channel used to communicate with the `TelemetryTask`.
+    pub sender: Sender<Op>,
+
+    /// `true` if the Service is active, `false` otherwise.
+    is_active: Arc<Cell<bool>>,
 }

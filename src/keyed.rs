@@ -3,7 +3,7 @@
 //!
 //! Keyed histograms represent measures on a set of entities known
 //! only at runtime, e.g. plug-ins, user scripts, etc. They are also
-//! slower, more memory-consuming and less type-safe than Single
+//! slower, more memory-consuming and less type-safe than Plain
 //! histograms, so you should prefer the latter whenever possible.
 //!
 
@@ -19,43 +19,39 @@ use task::{BackEnd, Op, KeyedRawStorage};
 use service::{Service, PrivateAccess};
 use indexing::*;
 
-//
-// A family of histograms, indexed by some value. Use these to
-// monitor families of values that cannot be determined at
-// compile-time, e.g. add-ons, programs, etc.
-//
+/// A family of histograms, indexed by some dynamic value. Use these
+/// to monitor families of values that cannot be determined at
+/// compile-time, e.g. add-ons, programs, etc.
 pub trait KeyedHistogram<K, T> {
-    //
-    // Record a value in this histogram.
-    //
-    // The value is recorded only if all of the following conditions are met:
-    // - telemetry is activated; and
-    // - this histogram has not expired; and
-    // - the histogram is active.
-    //
+    ///
+    /// Record a value in this histogram.
+    ///
+    /// If the service is currently inactive, this is a noop.
+    ///
     fn record(&self, key: K, value: T) {
         self.record_cb(|| Some((key, value)))
     }
 
-    //
-    // Record a value in this histogram, as provided by a callback.
-    //
-    // The callback is triggered only if all of the following conditions are met:
-    // - `telemetry` is activated; and
-    // - this histogram has not expired; and
-    // - the histogram is active.
-    //
-    // If the callback returns `None`, no value is recorded.
-    //
+    ///
+    /// Record a value in this histogram, as provided by a callback.
+    ///
+    /// If the service is currently inactive, this is a noop.
+    ///
+    /// If the callback returns `None`, no value is recorded.
+    ///
     fn record_cb<F>(&self, _: F) where F: FnOnce() -> Option<(K, T)>;
 }
 
-// Back-end features specific to keyed histograms.
-impl<K> BackEnd<Keyed<K>> where K: ToString{
+/// Back-end features specific to keyed histograms.
+impl<K> BackEnd<Keyed<K>> where K: ToString {
+    /// Instruct the Telemetry Task to record a value in an
+    /// already registered histogram.
     fn raw_record(&self, k: &Key<Keyed<K>>, key: String, value: u32) {
         self.sender.send(Op::RecordKeyed(k.index, key, value)).unwrap();
     }
 
+    /// Instruct the Telemetry Task to record the result of a callback
+    /// in an already registered histogram.
     fn raw_record_cb<F, T>(&self, cb: F) -> bool where F: FnOnce() -> Option<(K, T)>, T: Flatten {
         if let Some(k) = self.get_key() {
             if let Some((key, v)) = cb() {

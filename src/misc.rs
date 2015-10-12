@@ -1,5 +1,17 @@
+///!
+///! Misc stuff used throughout the crate.
+///!
+
+///
+/// A storage with a name attached.
+///
+/// Typically, `T` will be either a `PlainRawStorage` or a `KeyedRawStorage`.
+///
 pub struct NamedStorage<T: ?Sized> {
+    /// The name of the storage. Also used as a key, must be unique.
     pub name: String,
+
+    ///
     pub contents: Box<T>,
 }
 
@@ -44,7 +56,7 @@ impl Flatten for () {
 }
 
 //
-// Representation of buckets shared by both single and keyed linear histograms.
+// Representation of buckets shared by both plain and keyed linear histograms.
 //
 pub struct LinearBuckets {
     min: u32,

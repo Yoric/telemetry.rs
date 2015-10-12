@@ -17,12 +17,13 @@
 //!
 //!
 //! This crate provides an API for recording such data in _Histograms_
-//! and then serializing the data
+//! and then serializing the data. Uploading the data or storing th
+//! data is out of the scope of this crate.
 //!
 //!
 //!
 //! Memory note: the memory used by a histogram is recollected only
-//! when its instance of `telemetry` is garbage-collected. In other
+//! when its instance of `telemetry::Service` is garbage-collected. In other
 //! words, if a histogram goes out of scope for some reason, its data
 //! remains in telemetry and will be stored and/or uploaded in
 //! accordance with the configuration of this telemetry instance.
