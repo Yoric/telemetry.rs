@@ -16,7 +16,7 @@ use std::mem::size_of;
 
 use misc::{Flatten, LinearBuckets, SerializationFormat, vec_with_size};
 use task::{BackEnd, Op, KeyedRawStorage};
-use service::{Feature, PrivateAccess};
+use service::{Service, PrivateAccess};
 use indexing::*;
 
 //
@@ -117,7 +117,7 @@ pub struct KeyedFlag<T> {
 
 
 impl<K> KeyedFlag<K> where K: ToString {
-    pub fn new(feature: &Feature, name: String) -> KeyedFlag<K> {
+    pub fn new(feature: &Service, name: String) -> KeyedFlag<K> {
         let storage = Box::new(KeyedFlagStorage { encountered: HashSet::new() });
         let key = PrivateAccess::register_keyed(feature, name, storage);
         KeyedFlag {
@@ -229,7 +229,7 @@ impl KeyedRawStorage for KeyedLinearStorage {
 
 
 impl<K, T> KeyedLinear<K, T> where K: ToString, T: Flatten {
-    pub fn new(feature: &Feature, name: String, min: u32, max: u32, buckets: usize) -> KeyedLinear<K, T> {
+    pub fn new(feature: &Service, name: String, min: u32, max: u32, buckets: usize) -> KeyedLinear<K, T> {
         assert!(size_of::<u32>() <= size_of::<usize>());
         assert!(min < max);
         assert!(max - min >= buckets as u32);
@@ -307,7 +307,7 @@ impl<K> KeyedHistogram<K, u32> for KeyedCount<K> where K: ToString {
 
 
 impl<K> KeyedCount<K> {
-    pub fn new(feature: &Feature, name: String) -> KeyedCount<K> {
+    pub fn new(feature: &Service, name: String) -> KeyedCount<K> {
         let storage = Box::new(KeyedCountStorage { values: HashMap::new() });
         let key = PrivateAccess::register_keyed(feature, name, storage);
         KeyedCount {
@@ -382,7 +382,7 @@ impl<K, T> KeyedHistogram<K, T> for KeyedEnum<K, T> where K: ToString, T: Flatte
 }
 
 impl<K, T> KeyedEnum<K, T> where K: ToString, T:Flatten {
-    pub fn new(feature: &Feature, name: String, buckets: usize) -> KeyedEnum<K, T> {
+    pub fn new(feature: &Service, name: String, buckets: usize) -> KeyedEnum<K, T> {
         let storage = Box::new(KeyedEnumStorage {
             values: HashMap::new(),
             buckets: buckets

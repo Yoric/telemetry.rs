@@ -4,14 +4,14 @@ use self::vec_map::VecMap;
 extern crate rustc_serialize;
 use self::rustc_serialize::json::Json;
 
+use std::sync::Arc;
 use std::cell::Cell;
 use std::collections::{BTreeMap, HashSet};
-use std::sync::Arc;
 use std::sync::mpsc::{Receiver, Sender};
 
 use indexing::{Key};
 use misc::*;
-use service::{Feature, PrivateAccess};
+use service::{PrivateAccess, Service};
 
 
 //
@@ -101,40 +101,25 @@ impl TelemetryTask {
 // Features shared by all histograms
 //
 pub struct BackEnd<K> {
-    // A key used to map a histogram to its storage owned by telemetry,
-    // or None if the histogram has been rejected by telemetry because
-    // it has expired.
-    key: Option<Key<K>>,
-
-    // `true` unless the histogram has been deactivated by user request.
-    // If `false`, no data will be recorded for this histogram.
-    is_active: bool,
-
+    key: Key<K>,
+    is_active: Arc<Cell<bool>>,
     pub sender: Sender<Op>,
-    is_feature_active: Arc<Cell<bool>>,
 }
 
 impl<K> BackEnd<K> {
-    pub fn new(feature: &Feature, key: Option<Key<K>>) -> BackEnd<K> {
+    pub fn new(service: &Service, key: Key<K>) -> BackEnd<K> {
         BackEnd {
             key: key,
-            is_active: true,
-            sender: PrivateAccess::get_sender(feature).clone(),
-            is_feature_active: PrivateAccess::get_is_active(feature).clone(),
+            is_active: PrivateAccess::get_is_active(service).clone(),
+            sender: PrivateAccess::get_sender(service).clone(),
         }
     }
 
-    pub fn get_key(&self) -> Option<&Key<K>>
-    {
-        if !self.is_active {
-            return None;
-        }
-        if !self.is_feature_active.get() {
-            return None;
-        }
-        match self.key {
-            None => None,
-            Some(ref k) => Some(k)
+    pub fn get_key(&self) -> Option<&Key<K>> {
+        if self.is_active.get() {
+            Some(&self.key)
+        } else {
+            None
         }
     }
 }

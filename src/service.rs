@@ -11,43 +11,8 @@ use task::{Op, SingleRawStorage, KeyedRawStorage, TelemetryTask};
 use indexing::*;
 
 ///
-/// A group of histograms observed by Telemetry.
-///
-/// Many applications need to activate/deactivate measurements
-/// dynamically, based e.g. on user preferences, privacy settings,
-/// startup/shutdown sequence, etc. All histograms are created as part
-/// of a `Feature`, which can be used to turn on/off all the
-/// histograms that it owns.
-///
-impl Feature {
-    ///
-    /// Create a new feature.
-    ///
-    /// New features are **deactivated** by default.
-    ///
-    pub fn new(service: &Arc<Service>) -> Feature {
-        Feature {
-            is_active: Arc::new(Cell::new(false)),
-            sender: service.sender.clone(),
-            service: service.clone(),
-        }
-    }
-
-    pub fn set_active(&self, value: bool) {
-        self.is_active.set(value);
-    }
-
-    pub fn is_active(&self) -> bool {
-        self.is_active.get()
-    }
-}
-
-///
 /// The Telemetry service.
 ///
-/// Generally, an application will have only a single instance of this
-/// service but may have any number of instances of `Feature` which may
-/// be activated and deactivated individually.
 ///
 impl Service {
     pub fn new() -> Service {
@@ -60,6 +25,7 @@ impl Service {
             keys_single: KeyGenerator::new(),
             keys_keyed: KeyGenerator::new(),
             sender: sender,
+            is_active: Arc::new(Cell::new(false)),
         }
     }
 
@@ -71,18 +37,26 @@ impl Service {
         self.sender.send(Op::Serialize(format, sender)).unwrap();
     }
 
-    fn register_single(&self, name: String, storage: Box<SingleRawStorage>) -> Option<Key<Single>> {
+    pub fn set_active(&self, value: bool) {
+        self.is_active.set(value);
+    }
+
+    pub fn is_active(&self) -> bool {
+        self.is_active.get()
+    }
+
+    fn register_single(&self, name: String, storage: Box<SingleRawStorage>) -> Key<Single> {
         let key = self.keys_single.next();
         let named = NamedStorage { name: name, contents: storage };
         self.sender.send(Op::RegisterSingle(key.index, named)).unwrap();
-        Some(key)
+        key
     }
 
-    fn register_keyed<T>(&self, name: String, storage: Box<KeyedRawStorage>) -> Option<Key<Keyed<T>>> {
+    fn register_keyed<T>(&self, name: String, storage: Box<KeyedRawStorage>) -> Key<Keyed<T>> {
         let key = self.keys_keyed.next();
         let named = NamedStorage { name: name, contents: storage };
         self.sender.send(Op::RegisterKeyed(key.index, named)).unwrap();
-        Some(key)
+        key
     }
 }
 
@@ -99,16 +73,11 @@ pub struct Service {
     keys_single: KeyGenerator<Single>,
     keys_keyed: KeyGenerator<Map>,
 
+    is_active: Arc<Cell<bool>>,
+
     // Connection to the thread holding all the storage of this
     // instance of telemetry.
     sender: Sender<Op>,
-}
-
-pub struct Feature {
-    // Are measurements active for this feature?
-    is_active: Arc<Cell<bool>>,
-    sender: Sender<Op>,
-    service: Arc<Service>,
 }
 
 
@@ -116,19 +85,19 @@ pub struct Feature {
 pub struct PrivateAccess;
 
 impl PrivateAccess {
-    pub fn register_single(feature: &Feature, name: String, storage: Box<SingleRawStorage>) -> Option<Key<Single>> {
-        feature.service.register_single(name, storage)
+    pub fn register_single(service: &Service, name: String, storage: Box<SingleRawStorage>) -> Key<Single> {
+        service.register_single(name, storage)
     }
 
-    pub fn register_keyed<T>(feature: &Feature, name: String, storage: Box<KeyedRawStorage>) -> Option<Key<Keyed<T>>> {
-        feature.service.register_keyed(name, storage)
+    pub fn register_keyed<T>(service: &Service, name: String, storage: Box<KeyedRawStorage>) -> Key<Keyed<T>> {
+        service.register_keyed(name, storage)
     }
 
-    pub fn get_sender(feature: &Feature) -> &Sender<Op> {
-        &feature.sender
+    pub fn get_sender(service: &Service) -> &Sender<Op> {
+        &service.sender
     }
 
-    pub fn get_is_active(feature: &Feature) -> &Arc<Cell<bool>> {
-        &feature.is_active
+    pub fn get_is_active(service: &Service) -> &Arc<Cell<bool>> {
+        &service.is_active
     }
 }

@@ -15,7 +15,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use misc::{Flatten, LinearBuckets, SerializationFormat, vec_with_size};
 use task::{BackEnd, Op, SingleRawStorage};
-use service::{Feature, PrivateAccess};
+use service::{Service, PrivateAccess};
 use indexing::*;
 
 ///
@@ -149,7 +149,7 @@ impl Histogram<()> for Flag {
 
 
 impl Flag {
-    pub fn new(feature: &Feature, name: String) -> Flag {
+    pub fn new(feature: &Service, name: String) -> Flag {
         let storage = Box::new(FlagStorage { encountered: false });
         let key = PrivateAccess::register_single(feature, name, storage);
         Flag {
@@ -184,7 +184,7 @@ impl<T> Histogram<T> for Linear<T> where T: Flatten {
 }
 
 impl<T> Linear<T> where T: Flatten {
-    pub fn new(feature: &Feature, name: String, min: u32, max: u32, buckets: usize) -> Linear<T> {
+    pub fn new(feature: &Service, name: String, min: u32, max: u32, buckets: usize) -> Linear<T> {
         assert!(size_of::<u32>() <= size_of::<usize>());
         assert!(min < max);
         assert!(max - min >= buckets as u32);
@@ -267,7 +267,7 @@ impl Histogram<u32> for Count {
 
 
 impl Count {
-    pub fn new(feature: &Feature, name: String) -> Count {
+    pub fn new(feature: &Service, name: String) -> Count {
         let storage = Box::new(CountStorage { value: 0 });
         let key = PrivateAccess::register_single(feature, name, storage);
         Count {
@@ -322,7 +322,7 @@ impl<K> Histogram<K> for Enum<K> where K: Flatten {
 
 
 impl<K> Enum<K> where K: Flatten {
-    pub fn new(feature: &Feature, name: String, buckets: usize) -> Enum<K> {
+    pub fn new(feature: &Service, name: String, buckets: usize) -> Enum<K> {
         let storage = Box::new(EnumStorage { values: vec_with_size(buckets, 0) });
         let key = PrivateAccess::register_single(feature, name, storage);
         Enum {

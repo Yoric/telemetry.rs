@@ -12,14 +12,13 @@ use telemetry::*;
 #[test]
 fn create_flags() {
     let telemetry = Arc::new(Service::new());
-    let feature = Feature::new(&telemetry);
-    let flag_plain = plain::Flag::new(&feature, "Test linear plain".to_string());
-    let flag_map = keyed::KeyedFlag::new(&feature, "Test flag map".to_string());
+    let flag_plain = plain::Flag::new(&telemetry, "Test linear plain".to_string());
+    let flag_map = keyed::KeyedFlag::new(&telemetry, "Test flag map".to_string());
 
     flag_plain.record(());
     flag_map.record("key".to_string(), ());
 
-    feature.set_active(true);
+    telemetry.set_active(true);
     flag_plain.record(());
     flag_map.record("key".to_string(), ());
 }
@@ -27,20 +26,19 @@ fn create_flags() {
 #[test]
 fn create_linears() {
     let telemetry = Arc::new(Service::new());
-    let feature = Feature::new(&telemetry);
     let linear_plain =
-        plain::Linear::new(&feature,
+        plain::Linear::new(&telemetry,
                             "Test linear plain".to_string(),
                             0, 100, 10);
     let linear_map =
-        keyed::KeyedLinear::new(&feature,
+        keyed::KeyedLinear::new(&telemetry,
                                 "Test linear map".to_string(),
                                 0, 100, 10);
 
     linear_plain.record(0);
     linear_map.record("key".to_string(), 0);
 
-    feature.set_active(true);
+    telemetry.set_active(true);
     linear_plain.record(0);
     linear_map.record("key".to_string(), 0);
 }
@@ -49,9 +47,8 @@ fn create_linears() {
 #[should_panic]
 fn create_linears_bad_1() {
     let telemetry = Arc::new(Service::new());
-    let feature = Feature::new(&telemetry);
     let _ : plain::Linear<u32> =
-        plain::Linear::new(&feature,
+        plain::Linear::new(&telemetry,
                             "Test linear plain".to_string(),
                             0, 100, 0); // Not enough histograms.
 
@@ -61,9 +58,8 @@ fn create_linears_bad_1() {
 #[should_panic]
 fn create_linears_bad_2() {
     let telemetry = Arc::new(Service::new());
-    let feature = Feature::new(&telemetry);
     let _ : plain::Linear<u32> =
-        plain::Linear::new(&feature,
+        plain::Linear::new(&telemetry,
                             "Test linear plain".to_string(),
                             0, 0, 1); // min >= max
 
@@ -73,9 +69,8 @@ fn create_linears_bad_2() {
 #[should_panic]
 fn create_linears_bad_3() {
     let telemetry = Arc::new(Service::new());
-    let feature = Feature::new(&telemetry);
     let _ : plain::Linear<u32> =
-        plain::Linear::new(&feature,
+        plain::Linear::new(&telemetry,
                             "Test linear plain".to_string(),
                             0, 10, 20); // Not enough histograms.
 
@@ -100,25 +95,24 @@ impl Flatten for TestEnum {
 #[test]
 fn test_serialize_simple() {
     let telemetry = Arc::new(Service::new());
-    let feature = Feature::new(&telemetry);
 
-    feature.set_active(true);
+    telemetry.set_active(true);
 
     ////////// Test flags
 
     // A plain flag that will remain untouched.
     let flag_plain_1_name = "Test flag plain 1".to_string();
-    let flag_plain_1 = plain::Flag::new(&feature, flag_plain_1_name.clone());
+    let flag_plain_1 = plain::Flag::new(&telemetry, flag_plain_1_name.clone());
     let _ = flag_plain_1; // Silence an unused variable warning.
 
     // A plain flag that will be recorded once.
     let flag_plain_2_name = "Test flag plain 2".to_string();
-    let flag_plain_2 = plain::Flag::new(&feature, flag_plain_2_name.clone());
+    let flag_plain_2 = plain::Flag::new(&telemetry, flag_plain_2_name.clone());
     flag_plain_2.record(());
 
     // A map flag.
     let flag_map_name = "Test flag map".to_string();
-    let flag_map = keyed::KeyedFlag::new(&feature, flag_map_name.clone());
+    let flag_map = keyed::KeyedFlag::new(&telemetry, flag_map_name.clone());
     let key1 = "key 1".to_string();
     let key2 = "key 2".to_string();
     flag_map.record(key1.clone(), ());
@@ -150,14 +144,14 @@ fn test_serialize_simple() {
     ////////// Test linears
 
     // Add a plain linear histogram and fill it.
-    let linear_plain_1 = plain::Linear::new(&feature, "Test linear plain".to_string(), 0, 100, 10);
+    let linear_plain_1 = plain::Linear::new(&telemetry, "Test linear plain".to_string(), 0, 100, 10);
     linear_plain_1.record(100);
     linear_plain_1.record(99);
     linear_plain_1.record(98);
     linear_plain_1.record(25);
 
     // Add a keyed linear
-    let linear_keyed_1 = keyed::KeyedLinear::new(&feature, "Test linear dynamic".to_string(), 0, 100, 10);
+    let linear_keyed_1 = keyed::KeyedLinear::new(&telemetry, "Test linear dynamic".to_string(), 0, 100, 10);
     linear_keyed_1.record("Key 1".to_string(), 120);
     linear_keyed_1.record("Key 1".to_string(), 98);
     linear_keyed_1.record("Key 2".to_string(), 35);
@@ -201,12 +195,12 @@ fn test_serialize_simple() {
 
 
     ////////// Test count
-    let count_1 = plain::Count::new(&feature, "Count 1".to_string());
+    let count_1 = plain::Count::new(&telemetry, "Count 1".to_string());
     count_1.record(5);
     count_1.record(3);
     count_1.record(7);
 
-    let keyed_count_1 = keyed::KeyedCount::new(&feature, "Keyed count 1".to_string());
+    let keyed_count_1 = keyed::KeyedCount::new(&telemetry, "Keyed count 1".to_string());
     keyed_count_1.record("Key A".to_string(), 31);
     keyed_count_1.record("Key B".to_string(), 100);
     keyed_count_1.record("Key A".to_string(), 61);
@@ -237,12 +231,12 @@ fn test_serialize_simple() {
 
 
     ////////// Test Enum
-    let enum_1 = plain::Enum::new(&feature, "Enum 1".to_string(), 3);
+    let enum_1 = plain::Enum::new(&telemetry, "Enum 1".to_string(), 3);
     enum_1.record(TestEnum::Case2);
     enum_1.record(TestEnum::Case2);
     enum_1.record(TestEnum::Case3("foobar".to_string()));
 
-    let keyed_enum_1 = keyed::KeyedEnum::new(&feature, "Keyed enum 1".to_string(), 3);
+    let keyed_enum_1 = keyed::KeyedEnum::new(&telemetry, "Keyed enum 1".to_string(), 3);
     keyed_enum_1.record("Key 2".to_string(), TestEnum::Case1);
     keyed_enum_1.record("Key 1".to_string(), TestEnum::Case1);
     keyed_enum_1.record("Key 1".to_string(), TestEnum::Case2);

@@ -52,7 +52,7 @@ mod task;
 pub mod plain;
 pub mod keyed;
 mod service;
-pub use service::{Feature, Service};
+pub use service::Service;
 pub use keyed::KeyedHistogram;
 pub use plain::Histogram;
 
