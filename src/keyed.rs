@@ -51,9 +51,22 @@ pub trait KeyedHistogram<K, T> {
 }
 
 // Back-end features specific to keyed histograms.
-impl<T> BackEnd<Keyed<T>> {
-    fn raw_record(&self, k: &Key<Keyed<T>>, key: String, value: u32) {
+impl<K> BackEnd<Keyed<K>> where K: ToString{
+    fn raw_record(&self, k: &Key<Keyed<K>>, key: String, value: u32) {
         self.sender.send(Op::RecordKeyed(k.index, key, value)).unwrap();
+    }
+
+    fn raw_record_cb<F, T>(&self, cb: F) -> bool where F: FnOnce() -> Option<(K, T)>, T: Flatten {
+        if let Some(k) = self.get_key() {
+            if let Some((key, v)) = cb() {
+                self.raw_record(&k, key.to_string(), v.as_u32());
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        }
     }
 }
 
@@ -136,12 +149,7 @@ impl KeyedRawStorage for KeyedFlagStorage {
 
 impl<K> KeyedHistogram<K, ()> for KeyedFlag<K> where K: ToString {
     fn record_cb<F>(&self, cb: F) where F: FnOnce() -> Option<(K, ())>  {
-        if let Some(k) = self.back_end.get_key() {
-            match cb() {
-                None => {}
-                Some((key, ())) => self.back_end.raw_record(&k, key.to_string(), 0)
-            }
-        }
+        self.back_end.raw_record_cb(cb);
     }
 }
 
@@ -225,7 +233,7 @@ impl<K, T> KeyedLinear<K, T> where K: ToString, T: Flatten {
         assert!(size_of::<u32>() <= size_of::<usize>());
         assert!(min < max);
         assert!(max - min >= buckets as u32);
-        let shape = KeyedLinearBuckets { min: min, max: max, buckets: buckets };
+        let shape = KeyedLinearBuckets::new(min, max, buckets);
         let storage = Box::new(KeyedLinearStorage::new(shape));
         let key = PrivateAccess::register_keyed(feature, name, storage);
         KeyedLinear {
@@ -237,12 +245,7 @@ impl<K, T> KeyedLinear<K, T> where K: ToString, T: Flatten {
 
 impl<K, T> KeyedHistogram<K, T> for KeyedLinear<K, T> where K: ToString, T: Flatten {
     fn record_cb<F>(&self, cb: F) where F: FnOnce() -> Option<(K, T)>  {
-        if let Some(k) = self.back_end.get_key() {
-            match cb() {
-                None => {}
-                Some((key, v)) => self.back_end.raw_record(&k, key.to_string(), v.as_u32())
-            }
-        }
+        self.back_end.raw_record_cb(cb);
     }
 }
 
@@ -298,14 +301,7 @@ impl KeyedRawStorage for KeyedCountStorage {
 
 impl<K> KeyedHistogram<K, u32> for KeyedCount<K> where K: ToString {
     fn record_cb<F>(&self, cb: F) where F: FnOnce() -> Option<(K, u32)>  {
-        if let Some(k) = self.back_end.get_key() {
-            match cb() {
-                None => {}
-                Some((key, v)) => {
-                    self.back_end.raw_record(&k, key.to_string(), v)
-                }
-            }
-        }
+        self.back_end.raw_record_cb(cb);
     }
 }
 
@@ -315,6 +311,85 @@ impl<K> KeyedCount<K> {
         let storage = Box::new(KeyedCountStorage { values: HashMap::new() });
         let key = PrivateAccess::register_keyed(feature, name, storage);
         KeyedCount {
+            back_end: BackEnd::new(feature, key),
+        }
+    }
+}
+
+
+///
+///
+/// Enumerated histograms.
+///
+/// Enumerated histogram generalize Count histograms to families of
+/// keys known at compile-time. They are useful, for instance, to know
+/// how often users have picked a specific choice from several, or how
+/// many times each kind of error has been triggered, etc.
+///
+///
+/// With `SerializationFormat::SimpleJson`, these histograms are
+/// serialized as an object, one field per key (sorted), with value an
+/// array of numbers, in the order of enum values.
+///
+pub struct KeyedEnum<K, T> where K: ToString, T: Flatten {
+    witness: PhantomData<T>,
+    back_end: BackEnd<Keyed<K>>,
+}
+
+// The storage, owned by the Telemetry Task.
+struct KeyedEnumStorage {
+    values: HashMap<String, Vec<u32>>,
+    buckets: usize,
+}
+
+impl KeyedRawStorage for KeyedEnumStorage {
+    fn store(&mut self, key: String, value: u32) {
+        match self.values.entry(key) {
+            Occupied(mut e) => {
+                let vec = e.get_mut();
+                vec[value as usize] += 1;
+            }
+            Vacant(e) => {
+                let mut vec = vec_with_size(self.buckets, 0);
+                vec[value as usize] = 1;
+                e.insert(vec);
+            }
+        }
+    }
+    fn to_json(&self, format: &SerializationFormat) -> Json {
+        match format {
+            &SerializationFormat::SimpleJson => {
+                // Sort keys, for easier testing/comparison.
+                let mut values : Vec<_> = self.values.iter().collect();
+                values.sort();
+                // Turn everything into an object.
+                let mut tree = BTreeMap::new();
+                for value in values {
+                    let (name, array) = value;
+                    let vec  = array.iter().map(|&x| Json::I64(x.clone() as i64)).collect();
+                    tree.insert(name.clone(), Json::Array(vec));
+                }
+                Json::Object(tree)
+            }
+        }
+    }
+}
+
+impl<K, T> KeyedHistogram<K, T> for KeyedEnum<K, T> where K: ToString, T: Flatten {
+    fn record_cb<F>(&self, cb: F) where F: FnOnce() -> Option<(K, T)>  {
+        self.back_end.raw_record_cb(cb);
+    }
+}
+
+impl<K, T> KeyedEnum<K, T> where K: ToString, T:Flatten {
+    pub fn new(feature: &Feature, name: String, buckets: usize) -> KeyedEnum<K, T> {
+        let storage = Box::new(KeyedEnumStorage {
+            values: HashMap::new(),
+            buckets: buckets
+        });
+        let key = PrivateAccess::register_keyed(feature, name, storage);
+        KeyedEnum {
+            witness: PhantomData,
             back_end: BackEnd::new(feature, key),
         }
     }

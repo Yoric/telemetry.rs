@@ -54,6 +54,19 @@ impl BackEnd<Single> {
     fn raw_record(&self, k: &Key<Single>, value: u32) {
         self.sender.send(Op::RecordSingle(k.index, value)).unwrap();
     }
+
+    fn raw_record_cb<F, T>(&self, cb: F) -> bool where F: FnOnce() -> Option<T>, T: Flatten {
+        if let Some(k) = self.get_key() {
+            if let Some(v) = cb() {
+                self.raw_record(&k, v.as_u32());
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        }
+    }
 }
 
 ///
@@ -128,14 +141,8 @@ impl Histogram<()> for Flag {
             // messages, the histogram is already full.
             return;
         }
-        if let Some(k) = self.back_end.get_key() {
-            match cb() {
-                None => {}
-                Some(()) => {
-                    self.cache.store(true, Ordering::Relaxed);
-                    self.back_end.raw_record(&k, 0)
-                }
-            }
+        if self.back_end.raw_record_cb(cb) {
+            self.cache.store(true, Ordering::Relaxed);
         }
     }
 }
@@ -172,12 +179,7 @@ pub struct Linear<T> where T: Flatten {
 
 impl<T> Histogram<T> for Linear<T> where T: Flatten {
     fn record_cb<F>(&self, cb: F) where F: FnOnce() -> Option<T>  {
-        if let Some(k) = self.back_end.get_key() {
-            match cb() {
-                None => {}
-                Some(v) => self.back_end.raw_record(&k, v.as_u32())
-            }
-        }
+        self.back_end.raw_record_cb(cb);
     }
 }
 
@@ -186,7 +188,7 @@ impl<T> Linear<T> where T: Flatten {
         assert!(size_of::<u32>() <= size_of::<usize>());
         assert!(min < max);
         assert!(max - min >= buckets as u32);
-        let shape = LinearBuckets { min: min, max: max, buckets: buckets };
+        let shape = LinearBuckets::new(min, max, buckets);
         let storage = Box::new(LinearStorage::new(shape));
         let key = PrivateAccess::register_single(feature, name, storage);
         Linear {
@@ -226,7 +228,10 @@ impl SingleRawStorage for LinearStorage {
 ///
 /// Count histograms.
 ///
-/// A Count histogram simply accumulates the numbers passed with `record()`.
+/// A Count histogram simply accumulates the numbers passed with
+/// `record()`. Count histograms are useful, for instance, to know how
+/// many times a feature has been used, or how many times an error has
+/// been triggered.
 ///
 ///
 /// With `SerializationFormat::SimpleJson`, these histograms are
@@ -256,14 +261,7 @@ impl SingleRawStorage for CountStorage {
 
 impl Histogram<u32> for Count {
     fn record_cb<F>(&self, cb: F) where F: FnOnce() -> Option<u32>  {
-        if let Some(k) = self.back_end.get_key() {
-            match cb() {
-                None => {}
-                Some(v) => {
-                    self.back_end.raw_record(&k, v)
-                }
-            }
-        }
+        self.back_end.raw_record_cb(cb);
     }
 }
 
@@ -273,6 +271,62 @@ impl Count {
         let storage = Box::new(CountStorage { value: 0 });
         let key = PrivateAccess::register_single(feature, name, storage);
         Count {
+            back_end: BackEnd::new(feature, key),
+        }
+    }
+}
+
+
+
+///
+///
+/// Enumerated histograms.
+///
+/// Enumerated histogram generalize Count histograms to families of
+/// keys known at compile-time. They are useful, for instance, to know
+/// how often users have picked a specific choice from several, or how
+/// many times each kind of error has been triggered, etc.
+///
+///
+/// With `SerializationFormat::SimpleJson`, these histograms are
+/// serialized as an array of numbers, in the order of enum values.
+///
+pub struct Enum<K> where K: Flatten {
+    witness: PhantomData<K>,
+    back_end: BackEnd<Single>,
+}
+
+// The storage, owned by the Telemetry Task.
+struct EnumStorage {
+    values: Vec<u32>
+}
+
+impl SingleRawStorage for EnumStorage {
+    fn store(&mut self, value: u32) {
+        self.values[value as usize] += 1;
+    }
+    fn to_json(&self, format: &SerializationFormat) -> Json {
+        match format {
+            &SerializationFormat::SimpleJson => {
+                Json::Array(self.values.iter().map(|&x| Json::I64(x as i64)).collect())
+            }
+        }
+    }
+}
+
+impl<K> Histogram<K> for Enum<K> where K: Flatten {
+    fn record_cb<F>(&self, cb: F) where F: FnOnce() -> Option<K>  {
+        self.back_end.raw_record_cb(cb);
+    }
+}
+
+
+impl<K> Enum<K> where K: Flatten {
+    pub fn new(feature: &Feature, name: String, buckets: usize) -> Enum<K> {
+        let storage = Box::new(EnumStorage { values: vec_with_size(buckets, 0) });
+        let key = PrivateAccess::register_single(feature, name, storage);
+        Enum {
+            witness: PhantomData,
             back_end: BackEnd::new(feature, key),
         }
     }

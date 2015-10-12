@@ -81,6 +81,22 @@ fn create_linears_bad_3() {
 
 }
 
+enum TestEnum {
+    Case1,
+    Case2,
+    Case3(String)
+}
+
+impl Flatten for TestEnum {
+    fn as_u32(&self) -> u32 {
+        match self {
+            &TestEnum::Case1 => 0,
+            &TestEnum::Case2 => 1,
+            &TestEnum::Case3(_) => 2
+        }
+    }
+}
+
 #[test]
 fn test_serialize_simple() {
     let telemetry = Arc::new(Service::new());
@@ -218,5 +234,43 @@ fn test_serialize_simple() {
     } else {
         panic!("Not a Json object");
     }
+
+
+    ////////// Test Enum
+    let enum_1 = plain::Enum::new(&feature, "Enum 1".to_string(), 3);
+    enum_1.record(TestEnum::Case2);
+    enum_1.record(TestEnum::Case2);
+    enum_1.record(TestEnum::Case3("foobar".to_string()));
+
+    let keyed_enum_1 = keyed::KeyedEnum::new(&feature, "Keyed enum 1".to_string(), 3);
+    keyed_enum_1.record("Key 2".to_string(), TestEnum::Case1);
+    keyed_enum_1.record("Key 1".to_string(), TestEnum::Case1);
+    keyed_enum_1.record("Key 1".to_string(), TestEnum::Case2);
+    keyed_enum_1.record("Key 1".to_string(), TestEnum::Case2);
+
+    telemetry.to_json(SerializationFormat::SimpleJson, sender.clone());
+    let (plain, keyed) = receiver.recv().unwrap();
+    if let Json::Object(plain_btree) = plain {
+        if let Some(ref hist) = plain_btree.get(&"Enum 1".to_string()) {
+            let json = format!("{}", hist);
+            assert_eq!(json, "[0,2,1]");
+        } else {
+            panic!("No record for the histogram");
+        }
+    } else {
+        panic!("Not a Json object");
+    }
+
+    if let Json::Object(keyed_btree) = keyed {
+        if let Some(ref hist) = keyed_btree.get(&"Keyed enum 1".to_string()) {
+            let json = format!("{}", hist);
+            assert_eq!(json, "{\"Key 1\":[1,2,0],\"Key 2\":[1,0,0]}");
+        } else {
+            panic!("No record for the histogram");
+        }
+    } else {
+        panic!("Not a Json object");
+    }
+
 }
 

@@ -37,16 +37,33 @@ impl Flatten for u32 {
     }
 }
 
+impl Flatten for () {
+    fn as_u32(&self) -> u32 {
+        0
+    }
+}
+
 //
 // Representation of buckets shared by both single and keyed linear histograms.
 //
 pub struct LinearBuckets {
-    pub min: u32,
-    pub max: u32, // Invariant: max > min
+    min: u32,
+    max: u32, // Invariant: max > min
     pub buckets: usize,
 }
 
 impl LinearBuckets {
+    pub fn new(min: u32, max: u32, buckets: usize) -> LinearBuckets {
+        assert!(min < max);
+        assert!(buckets > 0);
+        assert!(buckets < (max - min) as usize);
+        LinearBuckets {
+            min: min,
+            max: max,
+            buckets: buckets
+        }
+    }
+
     pub fn get_bucket(&self, value: u32) -> usize {
         if value <= self.min {
             0
@@ -68,7 +85,7 @@ pub fn vec_with_size<T>(size: usize, value: T) -> Vec<T> where T: Clone {
         // Resize. In future versions of Rust, we should
         // be able to use `vec.resize`.
         vec.set_len(size);
-        for i in 0 .. size - 1 {
+        for i in 0 .. size {
             vec[i] = value.clone();
         }
     }
