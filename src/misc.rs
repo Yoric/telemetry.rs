@@ -16,6 +16,17 @@ pub struct NamedStorage<T: ?Sized> {
 }
 
 ///
+/// A subset of data to serialize.
+///
+pub enum Subset {
+    /// Serialize all plain histograms.
+    AllPlain,
+
+    /// Serialize all keyed histograms.
+    AllKeyed,
+}
+
+///
 /// A subformat of Json to use for serialization.
 ///
 pub enum SerializationFormat {
@@ -30,11 +41,6 @@ pub enum SerializationFormat {
     ///
     SimpleJson,
 }
-
-///
-/// A software version, e.g. [2015, 10, 10, 0].
-///
-pub type Version = [u32;4];
 
 ///
 /// A value that can be represented as a u32.

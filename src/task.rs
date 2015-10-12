@@ -64,9 +64,8 @@ pub enum Op {
     /// otherwise panic.
     RecordKeyed(usize, String, u32),
 
-    /// Proceed to serialization of the histogram in a given format.
-    /// Returns a pair (plain histograms, keyed histograms).
-    Serialize(SerializationFormat, Sender<(Json, Json)>),
+    /// Proceed to serialization in a given format.
+    Serialize(Subset, SerializationFormat, Sender<Json>),
 
     /// Terminate the thread immediately. Any further attempt to
     /// communicate with the tread will panic.
@@ -108,18 +107,22 @@ impl TelemetryTask {
                     let ref mut storage = self.keyed.get_mut(&index).unwrap();
                     storage.contents.store(key, value);
                 }
-                Op::Serialize(format, sender) => {
-                    let mut plain_object = BTreeMap::new();
-                    for ref histogram in self.plain.values() {
-                        plain_object.insert(histogram.name.clone(), histogram.contents.to_json(&format));
-                    }
+                Op::Serialize(what, format, sender) => {
+                    let mut object = BTreeMap::new();
+                    match what {
+                        Subset::AllPlain => {
+                            for ref histogram in self.plain.values() {
+                                object.insert(histogram.name.clone(), histogram.contents.to_json(&format));
+                            }
+                        },
+                        Subset::AllKeyed => {
+                            for ref histogram in self.keyed.values() {
+                                object.insert(histogram.name.clone(), histogram.contents.to_json(&format));
+                            }
 
-                    let mut keyed_object = BTreeMap::new();
-                    for ref histogram in self.keyed.values() {
-                        keyed_object.insert(histogram.name.clone(), histogram.contents.to_json(&format));
+                        }
                     }
-
-                    sender.send((Json::Object(plain_object), Json::Object(keyed_object))).unwrap();
+                    sender.send(Json::Object(object)).unwrap();
                 },
                 Op::Terminate => {
                     return;

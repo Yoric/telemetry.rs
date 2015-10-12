@@ -92,9 +92,19 @@ impl Flatten for TestEnum {
     }
 }
 
+fn get_all_serialized(telemetry: &Service) -> (Json, Json){
+    let (sender, receiver) = channel();
+    telemetry.to_json(Subset::AllPlain, SerializationFormat::SimpleJson, sender.clone());
+    let plain = receiver.recv().unwrap();
+
+    telemetry.to_json(Subset::AllKeyed, SerializationFormat::SimpleJson, sender.clone());
+    let keyed = receiver.recv().unwrap();
+    (plain, keyed)
+}
+
 #[test]
 fn test_serialize_simple() {
-    let telemetry = Arc::new(Service::new());
+    let telemetry = Service::new();
 
     telemetry.set_active(true);
 
@@ -119,9 +129,7 @@ fn test_serialize_simple() {
     flag_map.record(key2.clone(), ());
 
     // Serialize and check the results.
-    let (sender, receiver) = channel();
-    telemetry.to_json(SerializationFormat::SimpleJson, sender.clone());
-    let (plain, keyed) = receiver.recv().unwrap();
+    let (plain, keyed) = get_all_serialized(&telemetry);
 
     // Compare the plain stuff.
     // We're making sure that only our histograms appear.
@@ -158,8 +166,8 @@ fn test_serialize_simple() {
     linear_keyed_1.record("Key 2".to_string(), 55);
 
     // Compare stuff.
-    telemetry.to_json(SerializationFormat::SimpleJson, sender.clone());
-    let (plain, keyed) = receiver.recv().unwrap();
+
+    let (plain, keyed) = get_all_serialized(&telemetry);
     if let Json::Object(plain_btree) = plain {
         if let Some(&Json::Array(ref array)) = plain_btree.get(&"Test linear plain".to_string()) {
             let expect : Vec<Json> = vec![0, 0, 1, 0, 0, 0, 0, 0, 0, 3].iter().cloned().map(Json::I64).collect();
@@ -206,8 +214,7 @@ fn test_serialize_simple() {
     keyed_count_1.record("Key A".to_string(), 61);
     keyed_count_1.record("Key C".to_string(), 1);
 
-    telemetry.to_json(SerializationFormat::SimpleJson, sender.clone());
-    let (plain, keyed) = receiver.recv().unwrap();
+    let (plain, keyed) = get_all_serialized(&telemetry);
     if let Json::Object(plain_btree) = plain {
         if let Some(&Json::I64(ref num)) = plain_btree.get(&"Count 1".to_string()) {
             assert_eq!(*num, 15);
@@ -242,8 +249,7 @@ fn test_serialize_simple() {
     keyed_enum_1.record("Key 1".to_string(), TestEnum::Case2);
     keyed_enum_1.record("Key 1".to_string(), TestEnum::Case2);
 
-    telemetry.to_json(SerializationFormat::SimpleJson, sender.clone());
-    let (plain, keyed) = receiver.recv().unwrap();
+    let (plain, keyed) = get_all_serialized(&telemetry);
     if let Json::Object(plain_btree) = plain {
         if let Some(ref hist) = plain_btree.get(&"Enum 1".to_string()) {
             let json = format!("{}", hist);

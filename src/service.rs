@@ -6,7 +6,7 @@ use std::cell::Cell;
 use std::thread;
 use std::sync::mpsc::{channel, Sender};
 
-use misc::*;
+use misc::{NamedStorage, SerializationFormat, Subset};
 use task::{Op, PlainRawStorage, KeyedRawStorage, TelemetryTask};
 use indexing::*;
 
@@ -36,10 +36,13 @@ impl Service {
     ///
     /// Serialize all histograms as json, in a given format.
     ///
-    /// Returns a pair with plain histograms/keyed histograms.
+    /// # Panics
     ///
-    pub fn to_json(&self, format: SerializationFormat, sender: Sender<(Json, Json)>) {
-        self.sender.send(Op::Serialize(format, sender)).unwrap();
+    /// The service will panic if the sender is closed by the time serialization
+    /// is complete.
+    ///
+    pub fn to_json(&self, what: Subset, format: SerializationFormat, sender: Sender<Json>) {
+        self.sender.send(Op::Serialize(what, format, sender)).unwrap();
     }
 
     ///
