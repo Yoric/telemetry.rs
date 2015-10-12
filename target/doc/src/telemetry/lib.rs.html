@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="Source to the Rust file `src/lib.rs`.">
+    <meta name="keywords" content="rust, rustlang, rust-lang">
+
+    <title>lib.rs.html -- source</title>
+
+    <link rel="stylesheet" type="text/css" href="../../main.css">
+
+    
+    
+</head>
+<body class="rustdoc">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <section class="sidebar">
+        
+        
+    </section>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press ‘S’ to search, ‘?’ for more options…"
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content source"><pre class="line-numbers"><span id="1"> 1</span>
+<span id="2"> 2</span>
+<span id="3"> 3</span>
+<span id="4"> 4</span>
+<span id="5"> 5</span>
+<span id="6"> 6</span>
+<span id="7"> 7</span>
+<span id="8"> 8</span>
+<span id="9"> 9</span>
+<span id="10">10</span>
+<span id="11">11</span>
+<span id="12">12</span>
+<span id="13">13</span>
+<span id="14">14</span>
+<span id="15">15</span>
+<span id="16">16</span>
+<span id="17">17</span>
+<span id="18">18</span>
+<span id="19">19</span>
+<span id="20">20</span>
+<span id="21">21</span>
+<span id="22">22</span>
+<span id="23">23</span>
+<span id="24">24</span>
+<span id="25">25</span>
+<span id="26">26</span>
+<span id="27">27</span>
+<span id="28">28</span>
+<span id="29">29</span>
+<span id="30">30</span>
+<span id="31">31</span>
+<span id="32">32</span>
+<span id="33">33</span>
+<span id="34">34</span>
+<span id="35">35</span>
+<span id="36">36</span>
+<span id="37">37</span>
+<span id="38">38</span>
+<span id="39">39</span>
+<span id="40">40</span>
+<span id="41">41</span>
+<span id="42">42</span>
+<span id="43">43</span>
+<span id="44">44</span>
+<span id="45">45</span>
+<span id="46">46</span>
+<span id="47">47</span>
+<span id="48">48</span>
+<span id="49">49</span>
+<span id="50">50</span>
+<span id="51">51</span>
+<span id="52">52</span>
+<span id="53">53</span>
+<span id="54">54</span>
+<span id="55">55</span>
+<span id="56">56</span>
+<span id="57">57</span>
+<span id="58">58</span>
+<span id="59">59</span>
+<span id="60">60</span>
+<span id="61">61</span>
+</pre><pre class='rust '>
+<span class='doccomment'>//! Telemetry is a mechanism used to capture metrics in an application,</span>
+<span class='doccomment'>//! to later store the data locally or upload it to a server for</span>
+<span class='doccomment'>//! statistical analysis.</span>
+<span class='doccomment'>//!</span>
+<span class='doccomment'>//!</span>
+<span class='doccomment'>//! Examples of usage:</span>
+<span class='doccomment'>//!</span>
+<span class='doccomment'>//! - capturing the speed of an operation;</span>
+<span class='doccomment'>//! - finding out if users are actually using a feature;</span>
+<span class='doccomment'>//! - finding out how the duration of a session;</span>
+<span class='doccomment'>//! - determine the operating system on which the application is executed;</span>
+<span class='doccomment'>//! - determining the configuration of the application;</span>
+<span class='doccomment'>//! - capturing the operations that slow down the application;</span>
+<span class='doccomment'>//! - determining the amount of I/O performed by the application;</span>
+<span class='doccomment'>//! - ...</span>
+<span class='doccomment'>//!</span>
+<span class='doccomment'>//!</span>
+<span class='doccomment'>//! To make use of Telemetry, an application needs:</span>
+<span class='doccomment'>//!</span>
+<span class='doccomment'>//! - an instance of [`telemetry::Service`](services/struct.Service.html), designed</span>
+<span class='doccomment'>//!   to hold all the state in a dedicated thread and export it as needed;</span>
+<span class='doccomment'>//! - one or more instances of</span>
+<span class='doccomment'>//!   [`telemetry::Feature`](services/struct.Feature.html), designed allow activating</span>
+<span class='doccomment'>//!   or deactivating a group of histograms together;</span>
+<span class='doccomment'>//! - one or more instances of either</span>
+<span class='doccomment'>//!   [`single::Histogram`](single/trait.Histogram.html) or</span>
+<span class='doccomment'>//!   [`keyed::KeyedHistogram`](keyed/trait.KeyedHistogram.html), designed to</span>
+<span class='doccomment'>//!   actually record the data.</span>
+<span class='doccomment'>//!</span>
+<span class='doccomment'>//!</span>
+<span class='doccomment'>//! Memory note: the memory used by a histogram is recollected only</span>
+<span class='doccomment'>//! when its instance of `telemetry` is garbage-collected. In other</span>
+<span class='doccomment'>//! words, if a histogram goes out of scope for some reason, its data</span>
+<span class='doccomment'>//! remains in telemetry and will be stored and/or uploaded in</span>
+<span class='doccomment'>//! accordance with the configuration of this telemetry instance.</span>
+<span class='doccomment'>//!</span>
+<span class='doccomment'>//! See [Mozilla Telemetry</span>
+<span class='doccomment'>//! Server](https://github.com/mozilla/telemetry-server) for an</span>
+<span class='doccomment'>//! open-source implementation of a server implementing the Telemetry</span>
+<span class='doccomment'>//! protocol.</span>
+
+<span class='kw'>extern</span> <span class='kw'>crate</span> <span class='ident'>rustc_serialize</span>;
+
+
+<span class='kw'>mod</span> <span class='ident'>misc</span>;
+<span class='kw'>pub</span> <span class='kw'>use</span> <span class='ident'>misc</span>::{<span class='ident'>Flatten</span>, <span class='ident'>SerializationFormat</span>, <span class='ident'>Version</span>};
+
+<span class='kw'>mod</span> <span class='ident'>indexing</span>;
+
+<span class='kw'>mod</span> <span class='ident'>task</span>;
+
+<span class='kw'>pub</span> <span class='kw'>mod</span> <span class='ident'>plain</span>;
+<span class='kw'>pub</span> <span class='kw'>mod</span> <span class='ident'>keyed</span>;
+<span class='kw'>mod</span> <span class='ident'>service</span>;
+<span class='kw'>pub</span> <span class='kw'>use</span> <span class='ident'>service</span>::{<span class='ident'>Feature</span>, <span class='ident'>Service</span>};
+<span class='kw'>pub</span> <span class='kw'>use</span> <span class='ident'>keyed</span>::<span class='ident'>KeyedHistogram</span>;
+<span class='kw'>pub</span> <span class='kw'>use</span> <span class='ident'>plain</span>::<span class='ident'>Histogram</span>;
+
+
+
+
+</pre>
+</section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <div id="help" class="hidden">
+        <div>
+            <div class="shortcuts">
+                <h1>Keyboard Shortcuts</h1>
+
+                <dl>
+                    <dt>?</dt>
+                    <dd>Show this help dialog</dd>
+                    <dt>S</dt>
+                    <dd>Focus the search field</dd>
+                    <dt>&larrb;</dt>
+                    <dd>Move up in search results</dd>
+                    <dt>&rarrb;</dt>
+                    <dd>Move down in search results</dd>
+                    <dt>&#9166;</dt>
+                    <dd>Go to active search result</dd>
+                </dl>
+            </div>
+
+            <div class="infos">
+                <h1>Search Tricks</h1>
+
+                <p>
+                    Prefix searches with a type followed by a colon (e.g.
+                    <code>fn:</code>) to restrict the search to a given type.
+                </p>
+
+                <p>
+                    Accepted types are: <code>fn</code>, <code>mod</code>,
+                    <code>struct</code>, <code>enum</code>,
+                    <code>trait</code>, <code>typedef</code> (or
+                    <code>tdef</code>).
+                </p>
+
+                <p>
+                    Search functions by type signature (e.g.
+                    <code>vec -> usize</code>)
+                </p>
+            </div>
+        </div>
+    </div>
+
+    
+
+    <script>
+        window.rootPath = "../../";
+        window.currentCrate = "telemetry";
+        window.playgroundUrl = "";
+    </script>
+    <script src="../../jquery.js"></script>
+    <script src="../../main.js"></script>
+    
+    <script async src="../../search-index.js"></script>
+</body>
+</html>

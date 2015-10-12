@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="API documentation for the Rust `telemetry` crate.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, telemetry">
+
+    <title>telemetry - Rust</title>
+
+    <link rel="stylesheet" type="text/css" href="../main.css">
+
+    
+    
+</head>
+<body class="rustdoc">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <section class="sidebar">
+        
+        <p class='location'></p><script>window.sidebarCurrent = {name: 'telemetry', ty: 'mod', relpath: '../'};</script>
+    </section>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press ‘S’ to search, ‘?’ for more options…"
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content mod">
+<h1 class='fqn'><span class='in-band'>Crate <a class='mod' href=''>telemetry</a></span><span class='out-of-band'><span id='render-detail'>
+            <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
+                [<span class='inner'>&#x2212;</span>]
+            </a>
+        </span><a id='src-0' class='srclink' href='../src/telemetry/lib.rs.html#1-57' title='goto source code'>[src]</a></span></h1>
+<div class='docblock'><p>Telemetry is a mechanism used to capture metrics in an application,
+to later store the data locally or upload it to a server for
+statistical analysis.</p>
+
+<p>Examples of usage:</p>
+
+<ul>
+<li>capturing the speed of an operation;</li>
+<li>finding out if users are actually using a feature;</li>
+<li>finding out how the duration of a session;</li>
+<li>determine the operating system on which the application is executed;</li>
+<li>determining the configuration of the application;</li>
+<li>capturing the operations that slow down the application;</li>
+<li>determining the amount of I/O performed by the application;</li>
+<li>...</li>
+</ul>
+
+<p>To make use of Telemetry, an application needs:</p>
+
+<ul>
+<li>an instance of <a href="services/struct.Service.html"><code>telemetry::Service</code></a>, designed
+to hold all the state in a dedicated thread and export it as needed;</li>
+<li>one or more instances of
+<a href="services/struct.Feature.html"><code>telemetry::Feature</code></a>, designed allow activating
+or deactivating a group of histograms together;</li>
+<li>one or more instances of either
+<a href="single/trait.Histogram.html"><code>single::Histogram</code></a> or
+<a href="keyed/trait.KeyedHistogram.html"><code>keyed::KeyedHistogram</code></a>, designed to
+actually record the data.</li>
+</ul>
+
+<p>Memory note: the memory used by a histogram is recollected only
+when its instance of <code>telemetry</code> is garbage-collected. In other
+words, if a histogram goes out of scope for some reason, its data
+remains in telemetry and will be stored and/or uploaded in
+accordance with the configuration of this telemetry instance.</p>
+
+<p>See <a href="https://github.com/mozilla/telemetry-server">Mozilla Telemetry
+Server</a> for an
+open-source implementation of a server implementing the Telemetry
+protocol.</p>
+</div><h2 id='reexports' class='section-header'><a href="#reexports">Reexports</a></h2>
+<table><tr><td><code>pub use keyed::<a class='trait' href='../telemetry/keyed/trait.KeyedHistogram.html' title='telemetry::keyed::KeyedHistogram'>KeyedHistogram</a>;</code></td></tr><tr><td><code>pub use plain::<a class='trait' href='../telemetry/plain/trait.Histogram.html' title='telemetry::plain::Histogram'>Histogram</a>;</code></td></tr></table><h2 id='modules' class='section-header'><a href="#modules">Modules</a></h2>
+<table>
+                    <tr class=' module-item'>
+                        <td><a class='mod' href='keyed/index.html'
+                               title='telemetry::keyed'>keyed</a></td>
+                        <td class='docblock short'>
+                             
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='mod' href='plain/index.html'
+                               title='telemetry::plain'>plain</a></td>
+                        <td class='docblock short'>
+                             
+                        </td>
+                    </tr>
+                </table><h2 id='structs' class='section-header'><a href="#structs">Structs</a></h2>
+<table>
+                    <tr class=' module-item'>
+                        <td><a class='struct' href='struct.Feature.html'
+                               title='telemetry::Feature'>Feature</a></td>
+                        <td class='docblock short'>
+                             
+                        </td>
+                    </tr>
+                
+                    <tr class=' module-item'>
+                        <td><a class='struct' href='struct.Service.html'
+                               title='telemetry::Service'>Service</a></td>
+                        <td class='docblock short'>
+                             
+                        </td>
+                    </tr>
+                </table><h2 id='enums' class='section-header'><a href="#enums">Enums</a></h2>
+<table>
+                    <tr class=' module-item'>
+                        <td><a class='enum' href='enum.SerializationFormat.html'
+                               title='telemetry::SerializationFormat'>SerializationFormat</a></td>
+                        <td class='docblock short'>
+                             
+                        </td>
+                    </tr>
+                </table><h2 id='traits' class='section-header'><a href="#traits">Traits</a></h2>
+<table>
+                    <tr class=' module-item'>
+                        <td><a class='trait' href='trait.Flatten.html'
+                               title='telemetry::Flatten'>Flatten</a></td>
+                        <td class='docblock short'>
+                             
+                        </td>
+                    </tr>
+                </table><h2 id='types' class='section-header'><a href="#types">Type Definitions</a></h2>
+<table>
+                    <tr class=' module-item'>
+                        <td><a class='type' href='type.Version.html'
+                               title='telemetry::Version'>Version</a></td>
+                        <td class='docblock short'>
+                             
+                        </td>
+                    </tr>
+                </table></section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <div id="help" class="hidden">
+        <div>
+            <div class="shortcuts">
+                <h1>Keyboard Shortcuts</h1>
+
+                <dl>
+                    <dt>?</dt>
+                    <dd>Show this help dialog</dd>
+                    <dt>S</dt>
+                    <dd>Focus the search field</dd>
+                    <dt>&larrb;</dt>
+                    <dd>Move up in search results</dd>
+                    <dt>&rarrb;</dt>
+                    <dd>Move down in search results</dd>
+                    <dt>&#9166;</dt>
+                    <dd>Go to active search result</dd>
+                </dl>
+            </div>
+
+            <div class="infos">
+                <h1>Search Tricks</h1>
+
+                <p>
+                    Prefix searches with a type followed by a colon (e.g.
+                    <code>fn:</code>) to restrict the search to a given type.
+                </p>
+
+                <p>
+                    Accepted types are: <code>fn</code>, <code>mod</code>,
+                    <code>struct</code>, <code>enum</code>,
+                    <code>trait</code>, <code>typedef</code> (or
+                    <code>tdef</code>).
+                </p>
+
+                <p>
+                    Search functions by type signature (e.g.
+                    <code>vec -> usize</code>)
+                </p>
+            </div>
+        </div>
+    </div>
+
+    
+
+    <script>
+        window.rootPath = "../";
+        window.currentCrate = "telemetry";
+        window.playgroundUrl = "";
+    </script>
+    <script src="../jquery.js"></script>
+    <script src="../main.js"></script>
+    
+    <script async src="../search-index.js"></script>
+</body>
+</html>
