@@ -1,1 +1,1 @@
-initSidebarItems({"enum":[["SerializationFormat",""]],"trait":[["Flatten",""]],"type":[["Version",""]]});
+initSidebarItems({"enum":[["SerializationFormat",""],["Subset",""]],"trait":[["Flatten",""]]});

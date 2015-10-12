@@ -165,6 +165,9 @@
 <span id="123">123</span>
 <span id="124">124</span>
 <span id="125">125</span>
+<span id="126">126</span>
+<span id="127">127</span>
+<span id="128">128</span>
 </pre><pre class='rust '>
 <span class='kw'>extern</span> <span class='kw'>crate</span> <span class='ident'>rustc_serialize</span>;
 <span class='kw'>use</span> <span class='self'>self</span>::<span class='ident'>rustc_serialize</span>::<span class='ident'>json</span>::<span class='ident'>Json</span>;
@@ -174,7 +177,7 @@
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>thread</span>;
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>sync</span>::<span class='ident'>mpsc</span>::{<span class='ident'>channel</span>, <span class='ident'>Sender</span>};
 
-<span class='kw'>use</span> <span class='ident'>misc</span>::<span class='op'>*</span>;
+<span class='kw'>use</span> <span class='ident'>misc</span>::{<span class='ident'>NamedStorage</span>, <span class='ident'>SerializationFormat</span>, <span class='ident'>Subset</span>};
 <span class='kw'>use</span> <span class='ident'>task</span>::{<span class='ident'>Op</span>, <span class='ident'>PlainRawStorage</span>, <span class='ident'>KeyedRawStorage</span>, <span class='ident'>TelemetryTask</span>};
 <span class='kw'>use</span> <span class='ident'>indexing</span>::<span class='op'>*</span>;
 
@@ -204,10 +207,13 @@
     <span class='doccomment'>///</span>
     <span class='doccomment'>/// Serialize all histograms as json, in a given format.</span>
     <span class='doccomment'>///</span>
-    <span class='doccomment'>/// Returns a pair with plain histograms/keyed histograms.</span>
+    <span class='doccomment'>/// # Panics</span>
     <span class='doccomment'>///</span>
-    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>to_json</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>format</span>: <span class='ident'>SerializationFormat</span>, <span class='ident'>sender</span>: <span class='ident'>Sender</span><span class='op'>&lt;</span>(<span class='ident'>Json</span>, <span class='ident'>Json</span>)<span class='op'>&gt;</span>) {
-        <span class='self'>self</span>.<span class='ident'>sender</span>.<span class='ident'>send</span>(<span class='ident'>Op</span>::<span class='ident'>Serialize</span>(<span class='ident'>format</span>, <span class='ident'>sender</span>)).<span class='ident'>unwrap</span>();
+    <span class='doccomment'>/// The service will panic if the sender is closed by the time serialization</span>
+    <span class='doccomment'>/// is complete.</span>
+    <span class='doccomment'>///</span>
+    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>to_json</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>what</span>: <span class='ident'>Subset</span>, <span class='ident'>format</span>: <span class='ident'>SerializationFormat</span>, <span class='ident'>sender</span>: <span class='ident'>Sender</span><span class='op'>&lt;</span><span class='ident'>Json</span><span class='op'>&gt;</span>) {
+        <span class='self'>self</span>.<span class='ident'>sender</span>.<span class='ident'>send</span>(<span class='ident'>Op</span>::<span class='ident'>Serialize</span>(<span class='ident'>what</span>, <span class='ident'>format</span>, <span class='ident'>sender</span>)).<span class='ident'>unwrap</span>();
     }
 
     <span class='doccomment'>///</span>

@@ -45,7 +45,7 @@
             <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                 [<span class='inner'>&#x2212;</span>]
             </a>
-        </span><a id='src-3083' class='srclink' href='../src/telemetry/service.rs.html#86-102' title='goto source code'>[src]</a></span></h1>
+        </span><a id='src-3086' class='srclink' href='../src/telemetry/service.rs.html#89-105' title='goto source code'>[src]</a></span></h1>
 <pre class='rust struct'>pub struct Service {
     // some fields omitted
 }</pre><h2 id='methods'>Methods</h2><h3 class='impl'><code>impl <a class='struct' href='../telemetry/struct.Service.html' title='telemetry::Service'>Service</a></code></h3><div class='docblock'><p>The Telemetry service.</p>
@@ -55,10 +55,13 @@
 <p>The service will panic if an attempt is made to register two
 histograms with the same key.</p>
 </div><div class='impl-items'><h4 id='method.new' class='method'><code>fn <a href='#method.new' class='fnname'>new</a>() -&gt; <a class='struct' href='../telemetry/struct.Service.html' title='telemetry::Service'>Service</a></code></h4>
-<h4 id='method.to_json' class='method'><code>fn <a href='#method.to_json' class='fnname'>to_json</a>(&amp;self, format: <a class='enum' href='../telemetry/enum.SerializationFormat.html' title='telemetry::SerializationFormat'>SerializationFormat</a>, sender: <a class='struct' href='http://doc.rust-lang.org/nightly/std/sync/mpsc/struct.Sender.html' title='std::sync::mpsc::Sender'>Sender</a>&lt;<a href='http://doc.rust-lang.org/nightly/std/primitive.tuple.html'>(<a class='enum' href='http://doc.rust-lang.org/rustc-serialize/rustc_serialize/json/enum.Json.html' title='rustc_serialize::json::Json'>Json</a>, <a class='enum' href='http://doc.rust-lang.org/rustc-serialize/rustc_serialize/json/enum.Json.html' title='rustc_serialize::json::Json'>Json</a>)</a>&gt;)</code></h4>
+<h4 id='method.to_json' class='method'><code>fn <a href='#method.to_json' class='fnname'>to_json</a>(&amp;self, what: <a class='enum' href='../telemetry/enum.Subset.html' title='telemetry::Subset'>Subset</a>, format: <a class='enum' href='../telemetry/enum.SerializationFormat.html' title='telemetry::SerializationFormat'>SerializationFormat</a>, sender: <a class='struct' href='http://doc.rust-lang.org/nightly/std/sync/mpsc/struct.Sender.html' title='std::sync::mpsc::Sender'>Sender</a>&lt;<a class='enum' href='http://doc.rust-lang.org/rustc-serialize/rustc_serialize/json/enum.Json.html' title='rustc_serialize::json::Json'>Json</a>&gt;)</code></h4>
 <div class='docblock'><p>Serialize all histograms as json, in a given format.</p>
 
-<p>Returns a pair with plain histograms/keyed histograms.</p>
+<h1 id="panics" class='section-header'><a
+                           href="#panics">Panics</a></h1>
+<p>The service will panic if the sender is closed by the time serialization
+is complete.</p>
 </div><h4 id='method.set_active' class='method'><code>fn <a href='#method.set_active' class='fnname'>set_active</a>(&amp;self, value: <a href='http://doc.rust-lang.org/nightly/std/primitive.bool.html'>bool</a>)</code></h4>
 <div class='docblock'><p>Make the service (in)active.</p>
 

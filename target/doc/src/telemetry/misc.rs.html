@@ -145,6 +145,12 @@
 <span id="103">103</span>
 <span id="104">104</span>
 <span id="105">105</span>
+<span id="106">106</span>
+<span id="107">107</span>
+<span id="108">108</span>
+<span id="109">109</span>
+<span id="110">110</span>
+<span id="111">111</span>
 </pre><pre class='rust '>
 <span class='doccomment'>///!</span>
 <span class='doccomment'>///! Misc stuff used throughout the crate.</span>
@@ -164,6 +170,17 @@
 }
 
 <span class='doccomment'>///</span>
+<span class='doccomment'>/// A subset of data to serialize.</span>
+<span class='doccomment'>///</span>
+<span class='kw'>pub</span> <span class='kw'>enum</span> <span class='ident'>Subset</span> {
+    <span class='doccomment'>/// Serialize all plain histograms.</span>
+    <span class='ident'>AllPlain</span>,
+
+    <span class='doccomment'>/// Serialize all keyed histograms.</span>
+    <span class='ident'>AllKeyed</span>,
+}
+
+<span class='doccomment'>///</span>
 <span class='doccomment'>/// A subformat of Json to use for serialization.</span>
 <span class='doccomment'>///</span>
 <span class='kw'>pub</span> <span class='kw'>enum</span> <span class='ident'>SerializationFormat</span> {
@@ -178,11 +195,6 @@
     <span class='doccomment'>///</span>
     <span class='ident'>SimpleJson</span>,
 }
-
-<span class='doccomment'>///</span>
-<span class='doccomment'>/// A software version, e.g. [2015, 10, 10, 0].</span>
-<span class='doccomment'>///</span>
-<span class='kw'>pub</span> <span class='kw'>type</span> <span class='ident'>Version</span> <span class='op'>=</span> [<span class='ident'>u32</span>;<span class='number'>4</span>];
 
 <span class='doccomment'>///</span>
 <span class='doccomment'>/// A value that can be represented as a u32.</span>
