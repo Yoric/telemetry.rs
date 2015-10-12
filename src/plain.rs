@@ -21,7 +21,7 @@ use indexing::*;
 ///
 /// A plain histogram.
 ///
-pub trait Histogram<T> {
+pub trait Histogram<T> : Clone {
     ///
     /// Record a value in this histogram.
     ///
@@ -92,6 +92,14 @@ impl<T> Histogram<T> for Ignoring<T> {
     }
 }
 
+impl<T> Clone for Ignoring<T> {
+    fn clone(&self) -> Self {
+        Ignoring {
+            witness: PhantomData
+        }
+    }
+}
+
 ///
 ///
 /// Flag histograms.
@@ -152,6 +160,17 @@ impl Flag {
         Flag {
             back_end: BackEnd::new(feature, key),
             cache: AtomicBool::new(false),
+        }
+    }
+}
+
+impl Clone for Flag {
+    fn clone(&self) -> Self {
+        Flag {
+            back_end: self.back_end.clone(),
+            // The cache is not shared, but that's ok, it's just an
+            // optimization.
+            cache: AtomicBool::new(self.cache.load(Ordering::Relaxed)),
         }
     }
 }
@@ -217,7 +236,17 @@ impl PlainRawStorage for LinearStorage {
         self.values[index] += 1;
     }
     fn to_json(&self, _: &SerializationFormat) -> Json {
-        Json::Array(self.values.iter().map(|&x| Json::I64(x as i64)).collect())
+        let json = Json::Array(self.values.iter().map(|&x| Json::I64(x as i64)).collect());
+        json
+    }
+}
+
+impl<T> Clone for Linear<T> where T: Flatten {
+    fn clone(&self) -> Self {
+        Linear {
+            witness: PhantomData,
+            back_end: self.back_end.clone()
+        }
     }
 }
 
@@ -234,6 +263,7 @@ impl PlainRawStorage for LinearStorage {
 /// With `SerializationFormat::SimpleJson`, these histograms are
 /// serialized as a plain number.
 ///
+#[derive(Clone)]
 pub struct Count {
     back_end: BackEnd<Plain>,
 }
@@ -325,6 +355,15 @@ impl<K> Enum<K> where K: Flatten {
         Enum {
             witness: PhantomData,
             back_end: BackEnd::new(feature, key),
+        }
+    }
+}
+
+impl<K> Clone for Enum<K> where K: Flatten {
+    fn clone(&self) -> Self {
+        Enum {
+            witness: PhantomData,
+            back_end: self.back_end.clone()
         }
     }
 }

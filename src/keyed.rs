@@ -22,7 +22,7 @@ use indexing::*;
 /// A family of histograms, indexed by some dynamic value. Use these
 /// to monitor families of values that cannot be determined at
 /// compile-time, e.g. add-ons, programs, etc.
-pub trait KeyedHistogram<K, T> {
+pub trait KeyedHistogram<K, T> : Clone {
     ///
     /// Record a value in this histogram.
     ///
@@ -92,6 +92,14 @@ impl<K, T> KeyedHistogram<K, T> for KeyedIgnoring<K, T> {
     }
 }
 
+impl<T, U> Clone for KeyedIgnoring<T, U> {
+    fn clone(&self) -> Self {
+        KeyedIgnoring {
+            witness: PhantomData
+        }
+    }
+
+}
 
 ///
 ///
@@ -147,6 +155,15 @@ impl<K> KeyedHistogram<K, ()> for KeyedFlag<K> where K: ToString {
     fn record_cb<F>(&self, cb: F) where F: FnOnce() -> Option<(K, ())>  {
         self.back_end.raw_record_cb(cb);
     }
+}
+
+impl<T> Clone for KeyedFlag<T> {
+    fn clone(&self) -> Self {
+        KeyedFlag {
+            back_end: self.back_end.clone()
+        }
+    }
+
 }
 
 ///
@@ -245,6 +262,16 @@ impl<K, T> KeyedHistogram<K, T> for KeyedLinear<K, T> where K: ToString, T: Flat
     }
 }
 
+impl<K, T> Clone for KeyedLinear<K, T> where T: Flatten {
+    fn clone(&self) -> Self {
+        KeyedLinear {
+            back_end: self.back_end.clone(),
+            witness: PhantomData
+        }
+    }
+
+}
+
 ///
 ///
 /// Count histograms.
@@ -312,6 +339,14 @@ impl<K> KeyedCount<K> {
     }
 }
 
+impl<K> Clone for KeyedCount<K> {
+    fn clone(&self) -> Self {
+        KeyedCount {
+            back_end: self.back_end.clone()
+        }
+    }
+
+}
 
 ///
 ///
@@ -389,4 +424,14 @@ impl<K, T> KeyedEnum<K, T> where K: ToString, T:Flatten {
             back_end: BackEnd::new(feature, key),
         }
     }
+}
+
+impl<K, T> Clone for KeyedEnum<K, T> where K: ToString, T: Flatten {
+    fn clone(&self) -> Self {
+        KeyedEnum {
+            back_end: self.back_end.clone(),
+            witness: PhantomData,
+        }
+    }
+
 }

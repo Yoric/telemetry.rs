@@ -2,7 +2,7 @@ extern crate rustc_serialize;
 use self::rustc_serialize::json::Json;
 
 use std::sync::Arc;
-use std::cell::Cell;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::sync::mpsc::{channel, Sender};
 
@@ -35,7 +35,7 @@ impl Service {
             keys_plain: KeyGenerator::new(),
             keys_keyed: KeyGenerator::new(),
             sender: sender,
-            is_active: Arc::new(Cell::new(false)),
+            is_active: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -57,11 +57,11 @@ impl Service {
     /// Any data recorded on a histogram while the service is inactive will be ignored.
     ///
     pub fn set_active(&self, value: bool) {
-        self.is_active.set(value);
+        self.is_active.store(value, Ordering::Relaxed);
     }
 
     pub fn is_active(&self) -> bool {
-        self.is_active.get()
+        self.is_active.load(Ordering::Relaxed)
     }
 
     ///
@@ -102,9 +102,9 @@ pub struct Service {
     /// atomic to avoid the use of &mut.
     keys_keyed: KeyGenerator<Map>,
 
-    /// A shared cell that may be turned on/off to (de)activate
+    /// A shared boolean that may be turned on/off to (de)activate
     /// Telemetry.
-    is_active: Arc<Cell<bool>>,
+    is_active: Arc<AtomicBool>,
 
     /// Connection to the thread holding all the storage of this
     /// instance of the service.
@@ -126,7 +126,7 @@ impl PrivateAccess {
         &service.sender
     }
 
-    pub fn get_is_active(service: &Service) -> &Arc<Cell<bool>> {
+    pub fn get_is_active(service: &Service) -> &Arc<AtomicBool> {
         &service.is_active
     }
 }

@@ -13,7 +13,7 @@ extern crate rustc_serialize;
 use self::rustc_serialize::json::Json;
 
 use std::sync::Arc;
-use std::cell::Cell;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::collections::{BTreeMap, HashSet};
 use std::sync::mpsc::{Receiver, Sender};
 
@@ -153,7 +153,7 @@ pub struct TelemetryTask {
 /// `K` is the kind of user keys, either `Plain` for a plain
 /// histogram or `Keyed<T>` for a keyed histogram with user keys of
 /// type `T`.
-impl<K> BackEnd<K> {
+impl<K> BackEnd<K> where K: Clone {
     /// Create a new back-end attached to a service and a key.
     pub fn new(service: &Service, key: Key<K>) -> BackEnd<K> {
         BackEnd {
@@ -165,7 +165,7 @@ impl<K> BackEnd<K> {
 
     /// Get the key _if_ the service is currently active.
     pub fn get_key(&self) -> Option<&Key<K>> {
-        if self.is_active.get() {
+        if self.is_active.load(Ordering::Relaxed) {
             Some(&self.key)
         } else {
             None
@@ -173,7 +173,8 @@ impl<K> BackEnd<K> {
     }
 }
 
-pub struct BackEnd<K> {
+#[derive(Clone)]
+pub struct BackEnd<K> where K: Clone {
     /// The key used to communicate with the `TelemetryTask`.
     key: Key<K>,
 
@@ -181,5 +182,5 @@ pub struct BackEnd<K> {
     pub sender: Sender<Op>,
 
     /// `true` if the Service is active, `false` otherwise.
-    is_active: Arc<Cell<bool>>,
+    is_active: Arc<AtomicBool>,
 }
