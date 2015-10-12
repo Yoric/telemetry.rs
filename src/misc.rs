@@ -48,9 +48,9 @@ pub struct LinearBuckets {
 
 impl LinearBuckets {
     pub fn get_bucket(&self, value: u32) -> usize {
-        if value >= self.max {
+        if value <= self.min {
             0
-        } else if value <= self.min {
+        } else if value >= self.max {
             self.buckets - 1 as usize
         } else {
             let num = value as f32 - self.min as f32;

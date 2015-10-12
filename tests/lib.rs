@@ -46,6 +46,42 @@ fn create_linears() {
 }
 
 #[test]
+#[should_panic]
+fn create_linears_bad_1() {
+    let telemetry = Arc::new(Service::new());
+    let feature = Feature::new(&telemetry);
+    let _ : single::Linear<u32> =
+        single::Linear::new(&feature,
+                            "Test linear single".to_string(),
+                            0, 100, 0); // Not enough histograms.
+
+}
+
+#[test]
+#[should_panic]
+fn create_linears_bad_2() {
+    let telemetry = Arc::new(Service::new());
+    let feature = Feature::new(&telemetry);
+    let _ : single::Linear<u32> =
+        single::Linear::new(&feature,
+                            "Test linear single".to_string(),
+                            0, 0, 1); // min >= max
+
+}
+
+#[test]
+#[should_panic]
+fn create_linears_bad_3() {
+    let telemetry = Arc::new(Service::new());
+    let feature = Feature::new(&telemetry);
+    let _ : single::Linear<u32> =
+        single::Linear::new(&feature,
+                            "Test linear single".to_string(),
+                            0, 10, 20); // Not enough histograms.
+
+}
+
+#[test]
 fn test_serialize_simple() {
     let telemetry = Arc::new(Service::new());
     let feature = Feature::new(&telemetry);
@@ -102,6 +138,11 @@ fn test_serialize_simple() {
     linear_single_1.record(25);
 
     // Add a keyed linear
+    let linear_keyed_1 = keyed::KeyedLinear::new(&feature, "Test linear dynamic".to_string(), 0, 100, 10);
+    linear_keyed_1.record("Key 1".to_string(), 120);
+    linear_keyed_1.record("Key 1".to_string(), 98);
+    linear_keyed_1.record("Key 2".to_string(), 35);
+    linear_keyed_1.record("Key 2".to_string(), 55);
 
     // Compare stuff.
     telemetry.serialize(SerializationFormat::SimpleJson, sender.clone());
@@ -109,6 +150,28 @@ fn test_serialize_simple() {
     if let Json::Object(single_btree) = single {
         if let Some(&Json::Array(ref array)) = single_btree.get(&"Test linear single".to_string()) {
             assert_eq!(*array, vec![Json::I64(0), Json::I64(0), Json::I64(1), Json::I64(0), Json::I64(0), Json::I64(0), Json::I64(0), Json::I64(0), Json::I64(0), Json::I64(3)]);
+        } else {
+            panic!("No record for the histogram");
+        }
+    } else {
+        panic!("Not a Json object");
+    }
+
+    if let Json::Object(keyed_btree) = keyed {
+        if let Some(&Json::Object(ref hist_btree)) = keyed_btree.get(&"Test linear dynamic".to_string()) {
+            assert_eq!(hist_btree.len(), 2);
+            if let Some(&Json::Array(ref array)) = hist_btree.get(&"Key 1".to_string()) {
+                let expect : Vec<Json> = vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 2].iter().cloned().map(Json::I64).collect();
+                assert_eq!(*array, expect);
+            } else {
+                panic!("No key 1");
+            }
+            if let Some(&Json::Array(ref array)) = hist_btree.get(&"Key 2".to_string()) {
+                let expect : Vec<Json> = vec![0, 0, 0, 1, 0, 1, 0, 0, 0, 0].iter().cloned().map(Json::I64).collect();
+                assert_eq!(*array, expect);
+            } else {
+                panic!("No key 2");
+            }
         } else {
             panic!("No record for the histogram");
         }
