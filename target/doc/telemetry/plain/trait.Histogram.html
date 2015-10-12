@@ -45,21 +45,18 @@
             <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                 [<span class='inner'>&#x2212;</span>]
             </a>
-        </span><a id='src-893' class='srclink' href='../../src/telemetry/plain.rs.html#24-48' title='goto source code'>[src]</a></span></h1>
+        </span><a id='src-872' class='srclink' href='../../src/telemetry/plain.rs.html#24-42' title='goto source code'>[src]</a></span></h1>
 <pre class='rust trait'>pub trait Histogram&lt;T&gt; {
     fn <a href='#tymethod.record_cb' class='fnname'>record_cb</a>&lt;F&gt;(&amp;self, _: F) <span class='where'>where F: <a class='trait' href='http://doc.rust-lang.org/nightly/core/ops/trait.FnOnce.html' title='core::ops::FnOnce'>FnOnce</a>() -&gt; <a class='enum' href='http://doc.rust-lang.org/nightly/core/option/enum.Option.html' title='core::option::Option'>Option</a>&lt;T&gt;</span>;
 
     fn <a href='#method.record' class='fnname'>record</a>(&amp;self, value: T) { ... }
-}</pre><div class='docblock'><p>A single histogram.</p>
+}</pre><div class='docblock'><p>A plain histogram.</p>
 </div>
             <h2 id='required-methods'>Required Methods</h2>
             <div class='methods'>
         <h3 id='tymethod.record_cb' class='method stab '><code>fn <a href='#tymethod.record_cb' class='fnname'>record_cb</a>&lt;F&gt;(&amp;self, _: F) <span class='where'>where F: <a class='trait' href='http://doc.rust-lang.org/nightly/core/ops/trait.FnOnce.html' title='core::ops::FnOnce'>FnOnce</a>() -&gt; <a class='enum' href='http://doc.rust-lang.org/nightly/core/option/enum.Option.html' title='core::option::Option'>Option</a>&lt;T&gt;</span></code></h3><div class='docblock'><p>Record a value in this histogram, as provided by a callback.</p>
 
-<p>The callback is triggered only if all of the following conditions are met:
-- telemetry is activated; and
-- this histogram has not expired; and
-- the histogram is active.</p>
+<p>If the service is currently inactive, this is a noop.</p>
 
 <p>If the callback returns <code>None</code>, no value is recorded.</p>
 </div></div>
@@ -67,10 +64,7 @@
             <div class='methods'>
         <h3 id='method.record' class='method stab '><code>fn <a href='#method.record' class='fnname'>record</a>(&amp;self, value: T)</code></h3><div class='docblock'><p>Record a value in this histogram.</p>
 
-<p>The value is recorded only if all of the following conditions are met:
-- telemetry is activated; and
-- this histogram has not expired; and
-- the histogram is active.</p>
+<p>If the service is currently inactive, this is a noop.</p>
 </div></div>
         <h2 id='implementors'>Implementors</h2>
         <ul class='item-list' id='implementors-list'>

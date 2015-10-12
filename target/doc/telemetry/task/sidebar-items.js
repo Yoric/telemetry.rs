@@ -1,1 +1,1 @@
-initSidebarItems({"trait":[["KeyedRawStorage",""],["SingleRawStorage",""]]});
+initSidebarItems({"trait":[["KeyedRawStorage",""],["PlainRawStorage",""]]});

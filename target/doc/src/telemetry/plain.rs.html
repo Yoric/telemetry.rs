@@ -370,9 +370,6 @@
 <span id="328">328</span>
 <span id="329">329</span>
 <span id="330">330</span>
-<span id="331">331</span>
-<span id="332">332</span>
-<span id="333">333</span>
 </pre><pre class='rust '>
 <span class='doccomment'>//!</span>
 <span class='doccomment'>//! Definition of histograms.</span>
@@ -390,21 +387,18 @@
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>sync</span>::<span class='ident'>atomic</span>::{<span class='ident'>AtomicBool</span>, <span class='ident'>Ordering</span>};
 
 <span class='kw'>use</span> <span class='ident'>misc</span>::{<span class='ident'>Flatten</span>, <span class='ident'>LinearBuckets</span>, <span class='ident'>SerializationFormat</span>, <span class='ident'>vec_with_size</span>};
-<span class='kw'>use</span> <span class='ident'>task</span>::{<span class='ident'>BackEnd</span>, <span class='ident'>Op</span>, <span class='ident'>SingleRawStorage</span>};
-<span class='kw'>use</span> <span class='ident'>service</span>::{<span class='ident'>Feature</span>, <span class='ident'>PrivateAccess</span>};
+<span class='kw'>use</span> <span class='ident'>task</span>::{<span class='ident'>BackEnd</span>, <span class='ident'>Op</span>, <span class='ident'>PlainRawStorage</span>};
+<span class='kw'>use</span> <span class='ident'>service</span>::{<span class='ident'>Service</span>, <span class='ident'>PrivateAccess</span>};
 <span class='kw'>use</span> <span class='ident'>indexing</span>::<span class='op'>*</span>;
 
 <span class='doccomment'>///</span>
-<span class='doccomment'>/// A single histogram.</span>
+<span class='doccomment'>/// A plain histogram.</span>
 <span class='doccomment'>///</span>
 <span class='kw'>pub</span> <span class='kw'>trait</span> <span class='ident'>Histogram</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span> {
     <span class='doccomment'>///</span>
     <span class='doccomment'>/// Record a value in this histogram.</span>
     <span class='doccomment'>///</span>
-    <span class='doccomment'>/// The value is recorded only if all of the following conditions are met:</span>
-    <span class='doccomment'>/// - telemetry is activated; and</span>
-    <span class='doccomment'>/// - this histogram has not expired; and</span>
-    <span class='doccomment'>/// - the histogram is active.</span>
+    <span class='doccomment'>/// If the service is currently inactive, this is a noop.</span>
     <span class='doccomment'>///</span>
     <span class='kw'>fn</span> <span class='ident'>record</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>value</span>: <span class='ident'>T</span>) {
         <span class='self'>self</span>.<span class='ident'>record_cb</span>(<span class='op'>||</span> <span class='prelude-val'>Some</span>(<span class='ident'>value</span>))
@@ -413,24 +407,24 @@
     <span class='doccomment'>///</span>
     <span class='doccomment'>/// Record a value in this histogram, as provided by a callback.</span>
     <span class='doccomment'>///</span>
-    <span class='doccomment'>/// The callback is triggered only if all of the following conditions are met:</span>
-    <span class='doccomment'>/// - telemetry is activated; and</span>
-    <span class='doccomment'>/// - this histogram has not expired; and</span>
-    <span class='doccomment'>/// - the histogram is active.</span>
+    <span class='doccomment'>/// If the service is currently inactive, this is a noop.</span>
     <span class='doccomment'>///</span>
     <span class='doccomment'>/// If the callback returns `None`, no value is recorded.</span>
     <span class='doccomment'>///</span>
     <span class='kw'>fn</span> <span class='ident'>record_cb</span><span class='op'>&lt;</span><span class='ident'>F</span><span class='op'>&gt;</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, _: <span class='ident'>F</span>) <span class='kw'>where</span> <span class='ident'>F</span>: <span class='ident'>FnOnce</span>() <span class='op'>-&gt;</span> <span class='prelude-ty'>Option</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span>;
 }
 
-<span class='comment'>// Back-end features specific to single histograms.</span>
-<span class='kw'>impl</span> <span class='ident'>BackEnd</span><span class='op'>&lt;</span><span class='ident'>Single</span><span class='op'>&gt;</span> {
-    <span class='comment'>// Instruct the Telemetry Task to record a single value in an</span>
-    <span class='comment'>// already registered histogram.</span>
-    <span class='kw'>fn</span> <span class='ident'>raw_record</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>k</span>: <span class='kw-2'>&amp;</span><span class='ident'>Key</span><span class='op'>&lt;</span><span class='ident'>Single</span><span class='op'>&gt;</span>, <span class='ident'>value</span>: <span class='ident'>u32</span>) {
-        <span class='self'>self</span>.<span class='ident'>sender</span>.<span class='ident'>send</span>(<span class='ident'>Op</span>::<span class='ident'>RecordSingle</span>(<span class='ident'>k</span>.<span class='ident'>index</span>, <span class='ident'>value</span>)).<span class='ident'>unwrap</span>();
+
+<span class='doccomment'>/// Back-end features specific to plain histograms.</span>
+<span class='kw'>impl</span> <span class='ident'>BackEnd</span><span class='op'>&lt;</span><span class='ident'>Plain</span><span class='op'>&gt;</span> {
+    <span class='doccomment'>/// Instruct the Telemetry Task to record a value in an</span>
+    <span class='doccomment'>/// already registered histogram.</span>
+    <span class='kw'>fn</span> <span class='ident'>raw_record</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>k</span>: <span class='kw-2'>&amp;</span><span class='ident'>Key</span><span class='op'>&lt;</span><span class='ident'>Plain</span><span class='op'>&gt;</span>, <span class='ident'>value</span>: <span class='ident'>u32</span>) {
+        <span class='self'>self</span>.<span class='ident'>sender</span>.<span class='ident'>send</span>(<span class='ident'>Op</span>::<span class='ident'>RecordPlain</span>(<span class='ident'>k</span>.<span class='ident'>index</span>, <span class='ident'>value</span>)).<span class='ident'>unwrap</span>();
     }
 
+    <span class='doccomment'>/// Instruct the Telemetry Task to record the result of a callback</span>
+    <span class='doccomment'>/// in an already registered histogram.</span>
     <span class='kw'>fn</span> <span class='ident'>raw_record_cb</span><span class='op'>&lt;</span><span class='ident'>F</span>, <span class='ident'>T</span><span class='op'>&gt;</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>cb</span>: <span class='ident'>F</span>) <span class='op'>-&gt;</span> <span class='ident'>bool</span> <span class='kw'>where</span> <span class='ident'>F</span>: <span class='ident'>FnOnce</span>() <span class='op'>-&gt;</span> <span class='prelude-ty'>Option</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span>, <span class='ident'>T</span>: <span class='ident'>Flatten</span> {
         <span class='kw'>if</span> <span class='kw'>let</span> <span class='prelude-val'>Some</span>(<span class='ident'>k</span>) <span class='op'>=</span> <span class='self'>self</span>.<span class='ident'>get_key</span>() {
             <span class='kw'>if</span> <span class='kw'>let</span> <span class='prelude-val'>Some</span>(<span class='ident'>v</span>) <span class='op'>=</span> <span class='ident'>cb</span>() {
@@ -482,22 +476,22 @@
 <span class='doccomment'>///</span>
 <span class='doccomment'>///</span>
 <span class='doccomment'>/// With `SerializationFormat::SimpleJson`, these histograms are</span>
-<span class='doccomment'>/// serialized as a single number 0 (unset)/1 (set).</span>
+<span class='doccomment'>/// serialized as a plain number 0 (unset)/1 (set).</span>
 <span class='doccomment'>///</span>
 <span class='kw'>pub</span> <span class='kw'>struct</span> <span class='ident'>Flag</span> {
-    <span class='ident'>back_end</span>: <span class='ident'>BackEnd</span><span class='op'>&lt;</span><span class='ident'>Single</span><span class='op'>&gt;</span>,
+    <span class='ident'>back_end</span>: <span class='ident'>BackEnd</span><span class='op'>&lt;</span><span class='ident'>Plain</span><span class='op'>&gt;</span>,
 
-    <span class='comment'>// A cache used to avoid spamming the Task once the flag has been set.</span>
+    <span class='doccomment'>/// A cache used to avoid spamming the Task once the flag has been set.</span>
     <span class='ident'>cache</span>: <span class='ident'>AtomicBool</span>,
 }
 
-<span class='comment'>// The storage, owned by the Telemetry Task.</span>
+<span class='doccomment'>/// The storage, owned by the Telemetry Task.</span>
 <span class='kw'>struct</span> <span class='ident'>FlagStorage</span> {
-    <span class='comment'>// `true` once we have called `record`, `false` until then.</span>
+    <span class='doccomment'>/// `true` once we have called `record`, `false` until then.</span>
     <span class='ident'>encountered</span>: <span class='ident'>bool</span>
 }
 
-<span class='kw'>impl</span> <span class='ident'>SingleRawStorage</span> <span class='kw'>for</span> <span class='ident'>FlagStorage</span> {
+<span class='kw'>impl</span> <span class='ident'>PlainRawStorage</span> <span class='kw'>for</span> <span class='ident'>FlagStorage</span> {
     <span class='kw'>fn</span> <span class='ident'>store</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='self'>self</span>, _: <span class='ident'>u32</span>) {
         <span class='self'>self</span>.<span class='ident'>encountered</span> <span class='op'>=</span> <span class='boolval'>true</span>;
     }
@@ -525,9 +519,9 @@
 
 
 <span class='kw'>impl</span> <span class='ident'>Flag</span> {
-    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>new</span>(<span class='ident'>feature</span>: <span class='kw-2'>&amp;</span><span class='ident'>Feature</span>, <span class='ident'>name</span>: <span class='ident'>String</span>) <span class='op'>-&gt;</span> <span class='ident'>Flag</span> {
+    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>new</span>(<span class='ident'>feature</span>: <span class='kw-2'>&amp;</span><span class='ident'>Service</span>, <span class='ident'>name</span>: <span class='ident'>String</span>) <span class='op'>-&gt;</span> <span class='ident'>Flag</span> {
         <span class='kw'>let</span> <span class='ident'>storage</span> <span class='op'>=</span> <span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='ident'>FlagStorage</span> { <span class='ident'>encountered</span>: <span class='boolval'>false</span> });
-        <span class='kw'>let</span> <span class='ident'>key</span> <span class='op'>=</span> <span class='ident'>PrivateAccess</span>::<span class='ident'>register_single</span>(<span class='ident'>feature</span>, <span class='ident'>name</span>, <span class='ident'>storage</span>);
+        <span class='kw'>let</span> <span class='ident'>key</span> <span class='op'>=</span> <span class='ident'>PrivateAccess</span>::<span class='ident'>register_plain</span>(<span class='ident'>feature</span>, <span class='ident'>name</span>, <span class='ident'>storage</span>);
         <span class='ident'>Flag</span> {
             <span class='ident'>back_end</span>: <span class='ident'>BackEnd</span>::<span class='ident'>new</span>(<span class='ident'>feature</span>, <span class='ident'>key</span>),
             <span class='ident'>cache</span>: <span class='ident'>AtomicBool</span>::<span class='ident'>new</span>(<span class='boolval'>false</span>),
@@ -550,7 +544,7 @@
 <span class='doccomment'>/// order of buckets.</span>
 <span class='kw'>pub</span> <span class='kw'>struct</span> <span class='ident'>Linear</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span> <span class='kw'>where</span> <span class='ident'>T</span>: <span class='ident'>Flatten</span> {
     <span class='ident'>witness</span>: <span class='ident'>PhantomData</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span>,
-    <span class='ident'>back_end</span>: <span class='ident'>BackEnd</span><span class='op'>&lt;</span><span class='ident'>Single</span><span class='op'>&gt;</span>,
+    <span class='ident'>back_end</span>: <span class='ident'>BackEnd</span><span class='op'>&lt;</span><span class='ident'>Plain</span><span class='op'>&gt;</span>,
 }
 
 <span class='kw'>impl</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span> <span class='ident'>Histogram</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span> <span class='kw'>for</span> <span class='ident'>Linear</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span> <span class='kw'>where</span> <span class='ident'>T</span>: <span class='ident'>Flatten</span> {
@@ -560,13 +554,13 @@
 }
 
 <span class='kw'>impl</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span> <span class='ident'>Linear</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span> <span class='kw'>where</span> <span class='ident'>T</span>: <span class='ident'>Flatten</span> {
-    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>new</span>(<span class='ident'>feature</span>: <span class='kw-2'>&amp;</span><span class='ident'>Feature</span>, <span class='ident'>name</span>: <span class='ident'>String</span>, <span class='ident'>min</span>: <span class='ident'>u32</span>, <span class='ident'>max</span>: <span class='ident'>u32</span>, <span class='ident'>buckets</span>: <span class='ident'>usize</span>) <span class='op'>-&gt;</span> <span class='ident'>Linear</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span> {
+    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>new</span>(<span class='ident'>feature</span>: <span class='kw-2'>&amp;</span><span class='ident'>Service</span>, <span class='ident'>name</span>: <span class='ident'>String</span>, <span class='ident'>min</span>: <span class='ident'>u32</span>, <span class='ident'>max</span>: <span class='ident'>u32</span>, <span class='ident'>buckets</span>: <span class='ident'>usize</span>) <span class='op'>-&gt;</span> <span class='ident'>Linear</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span> {
         <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>size_of</span>::<span class='op'>&lt;</span><span class='ident'>u32</span><span class='op'>&gt;</span>() <span class='op'>&lt;=</span> <span class='ident'>size_of</span>::<span class='op'>&lt;</span><span class='ident'>usize</span><span class='op'>&gt;</span>());
         <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>min</span> <span class='op'>&lt;</span> <span class='ident'>max</span>);
         <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>max</span> <span class='op'>-</span> <span class='ident'>min</span> <span class='op'>&gt;=</span> <span class='ident'>buckets</span> <span class='kw'>as</span> <span class='ident'>u32</span>);
         <span class='kw'>let</span> <span class='ident'>shape</span> <span class='op'>=</span> <span class='ident'>LinearBuckets</span>::<span class='ident'>new</span>(<span class='ident'>min</span>, <span class='ident'>max</span>, <span class='ident'>buckets</span>);
         <span class='kw'>let</span> <span class='ident'>storage</span> <span class='op'>=</span> <span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='ident'>LinearStorage</span>::<span class='ident'>new</span>(<span class='ident'>shape</span>));
-        <span class='kw'>let</span> <span class='ident'>key</span> <span class='op'>=</span> <span class='ident'>PrivateAccess</span>::<span class='ident'>register_single</span>(<span class='ident'>feature</span>, <span class='ident'>name</span>, <span class='ident'>storage</span>);
+        <span class='kw'>let</span> <span class='ident'>key</span> <span class='op'>=</span> <span class='ident'>PrivateAccess</span>::<span class='ident'>register_plain</span>(<span class='ident'>feature</span>, <span class='ident'>name</span>, <span class='ident'>storage</span>);
         <span class='ident'>Linear</span> {
             <span class='ident'>witness</span>: <span class='ident'>PhantomData</span>,
             <span class='ident'>back_end</span>: <span class='ident'>BackEnd</span>::<span class='ident'>new</span>(<span class='ident'>feature</span>, <span class='ident'>key</span>),
@@ -590,7 +584,7 @@
     }
 }
 
-<span class='kw'>impl</span> <span class='ident'>SingleRawStorage</span> <span class='kw'>for</span> <span class='ident'>LinearStorage</span> {
+<span class='kw'>impl</span> <span class='ident'>PlainRawStorage</span> <span class='kw'>for</span> <span class='ident'>LinearStorage</span> {
     <span class='kw'>fn</span> <span class='ident'>store</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='self'>self</span>, <span class='ident'>value</span>: <span class='ident'>u32</span>) {
         <span class='kw'>let</span> <span class='ident'>index</span> <span class='op'>=</span> <span class='self'>self</span>.<span class='ident'>shape</span>.<span class='ident'>get_bucket</span>(<span class='ident'>value</span>);
         <span class='self'>self</span>.<span class='ident'>values</span>[<span class='ident'>index</span>] <span class='op'>+=</span> <span class='number'>1</span>;
@@ -611,10 +605,10 @@
 <span class='doccomment'>///</span>
 <span class='doccomment'>///</span>
 <span class='doccomment'>/// With `SerializationFormat::SimpleJson`, these histograms are</span>
-<span class='doccomment'>/// serialized as a single number.</span>
+<span class='doccomment'>/// serialized as a plain number.</span>
 <span class='doccomment'>///</span>
 <span class='kw'>pub</span> <span class='kw'>struct</span> <span class='ident'>Count</span> {
-    <span class='ident'>back_end</span>: <span class='ident'>BackEnd</span><span class='op'>&lt;</span><span class='ident'>Single</span><span class='op'>&gt;</span>,
+    <span class='ident'>back_end</span>: <span class='ident'>BackEnd</span><span class='op'>&lt;</span><span class='ident'>Plain</span><span class='op'>&gt;</span>,
 }
 
 <span class='comment'>// The storage, owned by the Telemetry Task.</span>
@@ -622,7 +616,7 @@
     <span class='ident'>value</span>: <span class='ident'>u32</span>
 }
 
-<span class='kw'>impl</span> <span class='ident'>SingleRawStorage</span> <span class='kw'>for</span> <span class='ident'>CountStorage</span> {
+<span class='kw'>impl</span> <span class='ident'>PlainRawStorage</span> <span class='kw'>for</span> <span class='ident'>CountStorage</span> {
     <span class='kw'>fn</span> <span class='ident'>store</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='self'>self</span>, <span class='ident'>value</span>: <span class='ident'>u32</span>) {
         <span class='self'>self</span>.<span class='ident'>value</span> <span class='op'>+=</span> <span class='ident'>value</span>;
     }
@@ -643,9 +637,9 @@
 
 
 <span class='kw'>impl</span> <span class='ident'>Count</span> {
-    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>new</span>(<span class='ident'>feature</span>: <span class='kw-2'>&amp;</span><span class='ident'>Feature</span>, <span class='ident'>name</span>: <span class='ident'>String</span>) <span class='op'>-&gt;</span> <span class='ident'>Count</span> {
+    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>new</span>(<span class='ident'>feature</span>: <span class='kw-2'>&amp;</span><span class='ident'>Service</span>, <span class='ident'>name</span>: <span class='ident'>String</span>) <span class='op'>-&gt;</span> <span class='ident'>Count</span> {
         <span class='kw'>let</span> <span class='ident'>storage</span> <span class='op'>=</span> <span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='ident'>CountStorage</span> { <span class='ident'>value</span>: <span class='number'>0</span> });
-        <span class='kw'>let</span> <span class='ident'>key</span> <span class='op'>=</span> <span class='ident'>PrivateAccess</span>::<span class='ident'>register_single</span>(<span class='ident'>feature</span>, <span class='ident'>name</span>, <span class='ident'>storage</span>);
+        <span class='kw'>let</span> <span class='ident'>key</span> <span class='op'>=</span> <span class='ident'>PrivateAccess</span>::<span class='ident'>register_plain</span>(<span class='ident'>feature</span>, <span class='ident'>name</span>, <span class='ident'>storage</span>);
         <span class='ident'>Count</span> {
             <span class='ident'>back_end</span>: <span class='ident'>BackEnd</span>::<span class='ident'>new</span>(<span class='ident'>feature</span>, <span class='ident'>key</span>),
         }
@@ -669,7 +663,7 @@
 <span class='doccomment'>///</span>
 <span class='kw'>pub</span> <span class='kw'>struct</span> <span class='ident'>Enum</span><span class='op'>&lt;</span><span class='ident'>K</span><span class='op'>&gt;</span> <span class='kw'>where</span> <span class='ident'>K</span>: <span class='ident'>Flatten</span> {
     <span class='ident'>witness</span>: <span class='ident'>PhantomData</span><span class='op'>&lt;</span><span class='ident'>K</span><span class='op'>&gt;</span>,
-    <span class='ident'>back_end</span>: <span class='ident'>BackEnd</span><span class='op'>&lt;</span><span class='ident'>Single</span><span class='op'>&gt;</span>,
+    <span class='ident'>back_end</span>: <span class='ident'>BackEnd</span><span class='op'>&lt;</span><span class='ident'>Plain</span><span class='op'>&gt;</span>,
 }
 
 <span class='comment'>// The storage, owned by the Telemetry Task.</span>
@@ -677,7 +671,7 @@
     <span class='ident'>values</span>: <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>u32</span><span class='op'>&gt;</span>
 }
 
-<span class='kw'>impl</span> <span class='ident'>SingleRawStorage</span> <span class='kw'>for</span> <span class='ident'>EnumStorage</span> {
+<span class='kw'>impl</span> <span class='ident'>PlainRawStorage</span> <span class='kw'>for</span> <span class='ident'>EnumStorage</span> {
     <span class='kw'>fn</span> <span class='ident'>store</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='self'>self</span>, <span class='ident'>value</span>: <span class='ident'>u32</span>) {
         <span class='self'>self</span>.<span class='ident'>values</span>[<span class='ident'>value</span> <span class='kw'>as</span> <span class='ident'>usize</span>] <span class='op'>+=</span> <span class='number'>1</span>;
     }
@@ -698,9 +692,9 @@
 
 
 <span class='kw'>impl</span><span class='op'>&lt;</span><span class='ident'>K</span><span class='op'>&gt;</span> <span class='ident'>Enum</span><span class='op'>&lt;</span><span class='ident'>K</span><span class='op'>&gt;</span> <span class='kw'>where</span> <span class='ident'>K</span>: <span class='ident'>Flatten</span> {
-    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>new</span>(<span class='ident'>feature</span>: <span class='kw-2'>&amp;</span><span class='ident'>Feature</span>, <span class='ident'>name</span>: <span class='ident'>String</span>, <span class='ident'>buckets</span>: <span class='ident'>usize</span>) <span class='op'>-&gt;</span> <span class='ident'>Enum</span><span class='op'>&lt;</span><span class='ident'>K</span><span class='op'>&gt;</span> {
+    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>new</span>(<span class='ident'>feature</span>: <span class='kw-2'>&amp;</span><span class='ident'>Service</span>, <span class='ident'>name</span>: <span class='ident'>String</span>, <span class='ident'>buckets</span>: <span class='ident'>usize</span>) <span class='op'>-&gt;</span> <span class='ident'>Enum</span><span class='op'>&lt;</span><span class='ident'>K</span><span class='op'>&gt;</span> {
         <span class='kw'>let</span> <span class='ident'>storage</span> <span class='op'>=</span> <span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='ident'>EnumStorage</span> { <span class='ident'>values</span>: <span class='ident'>vec_with_size</span>(<span class='ident'>buckets</span>, <span class='number'>0</span>) });
-        <span class='kw'>let</span> <span class='ident'>key</span> <span class='op'>=</span> <span class='ident'>PrivateAccess</span>::<span class='ident'>register_single</span>(<span class='ident'>feature</span>, <span class='ident'>name</span>, <span class='ident'>storage</span>);
+        <span class='kw'>let</span> <span class='ident'>key</span> <span class='op'>=</span> <span class='ident'>PrivateAccess</span>::<span class='ident'>register_plain</span>(<span class='ident'>feature</span>, <span class='ident'>name</span>, <span class='ident'>storage</span>);
         <span class='ident'>Enum</span> {
             <span class='ident'>witness</span>: <span class='ident'>PhantomData</span>,
             <span class='ident'>back_end</span>: <span class='ident'>BackEnd</span>::<span class='ident'>new</span>(<span class='ident'>feature</span>, <span class='ident'>key</span>),

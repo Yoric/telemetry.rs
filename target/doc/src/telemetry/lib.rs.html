@@ -95,12 +95,6 @@
 <span id="53">53</span>
 <span id="54">54</span>
 <span id="55">55</span>
-<span id="56">56</span>
-<span id="57">57</span>
-<span id="58">58</span>
-<span id="59">59</span>
-<span id="60">60</span>
-<span id="61">61</span>
 </pre><pre class='rust '>
 <span class='doccomment'>//! Telemetry is a mechanism used to capture metrics in an application,</span>
 <span class='doccomment'>//! to later store the data locally or upload it to a server for</span>
@@ -110,6 +104,7 @@
 <span class='doccomment'>//! Examples of usage:</span>
 <span class='doccomment'>//!</span>
 <span class='doccomment'>//! - capturing the speed of an operation;</span>
+<span class='doccomment'>//! - finding out if a remote service is often down, and how much impact this has on users;</span>
 <span class='doccomment'>//! - finding out if users are actually using a feature;</span>
 <span class='doccomment'>//! - finding out how the duration of a session;</span>
 <span class='doccomment'>//! - determine the operating system on which the application is executed;</span>
@@ -119,21 +114,14 @@
 <span class='doccomment'>//! - ...</span>
 <span class='doccomment'>//!</span>
 <span class='doccomment'>//!</span>
-<span class='doccomment'>//! To make use of Telemetry, an application needs:</span>
+<span class='doccomment'>//! This crate provides an API for recording such data in _Histograms_</span>
+<span class='doccomment'>//! and then serializing the data. Uploading the data or storing th</span>
+<span class='doccomment'>//! data is out of the scope of this crate.</span>
 <span class='doccomment'>//!</span>
-<span class='doccomment'>//! - an instance of [`telemetry::Service`](services/struct.Service.html), designed</span>
-<span class='doccomment'>//!   to hold all the state in a dedicated thread and export it as needed;</span>
-<span class='doccomment'>//! - one or more instances of</span>
-<span class='doccomment'>//!   [`telemetry::Feature`](services/struct.Feature.html), designed allow activating</span>
-<span class='doccomment'>//!   or deactivating a group of histograms together;</span>
-<span class='doccomment'>//! - one or more instances of either</span>
-<span class='doccomment'>//!   [`single::Histogram`](single/trait.Histogram.html) or</span>
-<span class='doccomment'>//!   [`keyed::KeyedHistogram`](keyed/trait.KeyedHistogram.html), designed to</span>
-<span class='doccomment'>//!   actually record the data.</span>
 <span class='doccomment'>//!</span>
 <span class='doccomment'>//!</span>
 <span class='doccomment'>//! Memory note: the memory used by a histogram is recollected only</span>
-<span class='doccomment'>//! when its instance of `telemetry` is garbage-collected. In other</span>
+<span class='doccomment'>//! when its instance of `telemetry::Service` is garbage-collected. In other</span>
 <span class='doccomment'>//! words, if a histogram goes out of scope for some reason, its data</span>
 <span class='doccomment'>//! remains in telemetry and will be stored and/or uploaded in</span>
 <span class='doccomment'>//! accordance with the configuration of this telemetry instance.</span>
@@ -156,7 +144,7 @@
 <span class='kw'>pub</span> <span class='kw'>mod</span> <span class='ident'>plain</span>;
 <span class='kw'>pub</span> <span class='kw'>mod</span> <span class='ident'>keyed</span>;
 <span class='kw'>mod</span> <span class='ident'>service</span>;
-<span class='kw'>pub</span> <span class='kw'>use</span> <span class='ident'>service</span>::{<span class='ident'>Feature</span>, <span class='ident'>Service</span>};
+<span class='kw'>pub</span> <span class='kw'>use</span> <span class='ident'>service</span>::<span class='ident'>Service</span>;
 <span class='kw'>pub</span> <span class='kw'>use</span> <span class='ident'>keyed</span>::<span class='ident'>KeyedHistogram</span>;
 <span class='kw'>pub</span> <span class='kw'>use</span> <span class='ident'>plain</span>::<span class='ident'>Histogram</span>;
 

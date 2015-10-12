@@ -45,7 +45,7 @@
             <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                 [<span class='inner'>&#x2212;</span>]
             </a>
-        </span><a id='src-0' class='srclink' href='../src/telemetry/lib.rs.html#1-57' title='goto source code'>[src]</a></span></h1>
+        </span><a id='src-0' class='srclink' href='../src/telemetry/lib.rs.html#1-51' title='goto source code'>[src]</a></span></h1>
 <div class='docblock'><p>Telemetry is a mechanism used to capture metrics in an application,
 to later store the data locally or upload it to a server for
 statistical analysis.</p>
@@ -54,6 +54,7 @@ statistical analysis.</p>
 
 <ul>
 <li>capturing the speed of an operation;</li>
+<li>finding out if a remote service is often down, and how much impact this has on users;</li>
 <li>finding out if users are actually using a feature;</li>
 <li>finding out how the duration of a session;</li>
 <li>determine the operating system on which the application is executed;</li>
@@ -63,22 +64,12 @@ statistical analysis.</p>
 <li>...</li>
 </ul>
 
-<p>To make use of Telemetry, an application needs:</p>
-
-<ul>
-<li>an instance of <a href="services/struct.Service.html"><code>telemetry::Service</code></a>, designed
-to hold all the state in a dedicated thread and export it as needed;</li>
-<li>one or more instances of
-<a href="services/struct.Feature.html"><code>telemetry::Feature</code></a>, designed allow activating
-or deactivating a group of histograms together;</li>
-<li>one or more instances of either
-<a href="single/trait.Histogram.html"><code>single::Histogram</code></a> or
-<a href="keyed/trait.KeyedHistogram.html"><code>keyed::KeyedHistogram</code></a>, designed to
-actually record the data.</li>
-</ul>
+<p>This crate provides an API for recording such data in <em>Histograms</em>
+and then serializing the data. Uploading the data or storing th
+data is out of the scope of this crate.</p>
 
 <p>Memory note: the memory used by a histogram is recollected only
-when its instance of <code>telemetry</code> is garbage-collected. In other
+when its instance of <code>telemetry::Service</code> is garbage-collected. In other
 words, if a histogram goes out of scope for some reason, its data
 remains in telemetry and will be stored and/or uploaded in
 accordance with the configuration of this telemetry instance.</p>
@@ -107,14 +98,6 @@ protocol.</p>
                     </tr>
                 </table><h2 id='structs' class='section-header'><a href="#structs">Structs</a></h2>
 <table>
-                    <tr class=' module-item'>
-                        <td><a class='struct' href='struct.Feature.html'
-                               title='telemetry::Feature'>Feature</a></td>
-                        <td class='docblock short'>
-                             
-                        </td>
-                    </tr>
-                
                     <tr class=' module-item'>
                         <td><a class='struct' href='struct.Service.html'
                                title='telemetry::Service'>Service</a></td>

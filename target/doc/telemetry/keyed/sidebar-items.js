@@ -1,1 +1,1 @@
-initSidebarItems({"struct":[["KeyedCount",""],["KeyedEnum",""],["KeyedFlag",""],["KeyedIgnoring",""],["KeyedLinear",""]],"trait":[["KeyedHistogram",""]]});
+initSidebarItems({"struct":[["KeyedCount",""],["KeyedEnum",""],["KeyedFlag",""],["KeyedIgnoring",""],["KeyedLinear",""]],"trait":[["KeyedHistogram","A family of histograms, indexed by some dynamic value. Use these to monitor families of values that cannot be determined at compile-time, e.g. add-ons, programs, etc."]]});

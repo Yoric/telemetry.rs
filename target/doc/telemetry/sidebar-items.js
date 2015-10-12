@@ -1,1 +1,1 @@
-initSidebarItems({"enum":[["SerializationFormat",""]],"mod":[["keyed",""],["plain",""]],"struct":[["Feature",""],["Service",""]],"trait":[["Flatten",""]],"type":[["Version",""]]});
+initSidebarItems({"enum":[["SerializationFormat",""]],"mod":[["keyed",""],["plain",""]],"struct":[["Service",""]],"trait":[["Flatten",""]],"type":[["Version",""]]});
