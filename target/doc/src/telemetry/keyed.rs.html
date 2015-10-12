@@ -432,6 +432,51 @@
 <span id="390">390</span>
 <span id="391">391</span>
 <span id="392">392</span>
+<span id="393">393</span>
+<span id="394">394</span>
+<span id="395">395</span>
+<span id="396">396</span>
+<span id="397">397</span>
+<span id="398">398</span>
+<span id="399">399</span>
+<span id="400">400</span>
+<span id="401">401</span>
+<span id="402">402</span>
+<span id="403">403</span>
+<span id="404">404</span>
+<span id="405">405</span>
+<span id="406">406</span>
+<span id="407">407</span>
+<span id="408">408</span>
+<span id="409">409</span>
+<span id="410">410</span>
+<span id="411">411</span>
+<span id="412">412</span>
+<span id="413">413</span>
+<span id="414">414</span>
+<span id="415">415</span>
+<span id="416">416</span>
+<span id="417">417</span>
+<span id="418">418</span>
+<span id="419">419</span>
+<span id="420">420</span>
+<span id="421">421</span>
+<span id="422">422</span>
+<span id="423">423</span>
+<span id="424">424</span>
+<span id="425">425</span>
+<span id="426">426</span>
+<span id="427">427</span>
+<span id="428">428</span>
+<span id="429">429</span>
+<span id="430">430</span>
+<span id="431">431</span>
+<span id="432">432</span>
+<span id="433">433</span>
+<span id="434">434</span>
+<span id="435">435</span>
+<span id="436">436</span>
+<span id="437">437</span>
 </pre><pre class='rust '>
 <span class='doccomment'>//!</span>
 <span class='doccomment'>//! Definition of keyed (aka &quot;dynamic family of&quot;) histograms.</span>
@@ -457,7 +502,7 @@
 <span class='doccomment'>/// A family of histograms, indexed by some dynamic value. Use these</span>
 <span class='doccomment'>/// to monitor families of values that cannot be determined at</span>
 <span class='doccomment'>/// compile-time, e.g. add-ons, programs, etc.</span>
-<span class='kw'>pub</span> <span class='kw'>trait</span> <span class='ident'>KeyedHistogram</span><span class='op'>&lt;</span><span class='ident'>K</span>, <span class='ident'>T</span><span class='op'>&gt;</span> {
+<span class='kw'>pub</span> <span class='kw'>trait</span> <span class='ident'>KeyedHistogram</span><span class='op'>&lt;</span><span class='ident'>K</span>, <span class='ident'>T</span><span class='op'>&gt;</span> : <span class='ident'>Clone</span> {
     <span class='doccomment'>///</span>
     <span class='doccomment'>/// Record a value in this histogram.</span>
     <span class='doccomment'>///</span>
@@ -527,6 +572,14 @@
     }
 }
 
+<span class='kw'>impl</span><span class='op'>&lt;</span><span class='ident'>T</span>, <span class='ident'>U</span><span class='op'>&gt;</span> <span class='ident'>Clone</span> <span class='kw'>for</span> <span class='ident'>KeyedIgnoring</span><span class='op'>&lt;</span><span class='ident'>T</span>, <span class='ident'>U</span><span class='op'>&gt;</span> {
+    <span class='kw'>fn</span> <span class='ident'>clone</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='kw'>Self</span> {
+        <span class='ident'>KeyedIgnoring</span> {
+            <span class='ident'>witness</span>: <span class='ident'>PhantomData</span>
+        }
+    }
+
+}
 
 <span class='doccomment'>///</span>
 <span class='doccomment'>///</span>
@@ -582,6 +635,15 @@
     <span class='kw'>fn</span> <span class='ident'>record_cb</span><span class='op'>&lt;</span><span class='ident'>F</span><span class='op'>&gt;</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>cb</span>: <span class='ident'>F</span>) <span class='kw'>where</span> <span class='ident'>F</span>: <span class='ident'>FnOnce</span>() <span class='op'>-&gt;</span> <span class='prelude-ty'>Option</span><span class='op'>&lt;</span>(<span class='ident'>K</span>, ())<span class='op'>&gt;</span>  {
         <span class='self'>self</span>.<span class='ident'>back_end</span>.<span class='ident'>raw_record_cb</span>(<span class='ident'>cb</span>);
     }
+}
+
+<span class='kw'>impl</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span> <span class='ident'>Clone</span> <span class='kw'>for</span> <span class='ident'>KeyedFlag</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span> {
+    <span class='kw'>fn</span> <span class='ident'>clone</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='kw'>Self</span> {
+        <span class='ident'>KeyedFlag</span> {
+            <span class='ident'>back_end</span>: <span class='self'>self</span>.<span class='ident'>back_end</span>.<span class='ident'>clone</span>()
+        }
+    }
+
 }
 
 <span class='doccomment'>///</span>
@@ -680,6 +742,16 @@
     }
 }
 
+<span class='kw'>impl</span><span class='op'>&lt;</span><span class='ident'>K</span>, <span class='ident'>T</span><span class='op'>&gt;</span> <span class='ident'>Clone</span> <span class='kw'>for</span> <span class='ident'>KeyedLinear</span><span class='op'>&lt;</span><span class='ident'>K</span>, <span class='ident'>T</span><span class='op'>&gt;</span> <span class='kw'>where</span> <span class='ident'>T</span>: <span class='ident'>Flatten</span> {
+    <span class='kw'>fn</span> <span class='ident'>clone</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='kw'>Self</span> {
+        <span class='ident'>KeyedLinear</span> {
+            <span class='ident'>back_end</span>: <span class='self'>self</span>.<span class='ident'>back_end</span>.<span class='ident'>clone</span>(),
+            <span class='ident'>witness</span>: <span class='ident'>PhantomData</span>
+        }
+    }
+
+}
+
 <span class='doccomment'>///</span>
 <span class='doccomment'>///</span>
 <span class='doccomment'>/// Count histograms.</span>
@@ -747,6 +819,14 @@
     }
 }
 
+<span class='kw'>impl</span><span class='op'>&lt;</span><span class='ident'>K</span><span class='op'>&gt;</span> <span class='ident'>Clone</span> <span class='kw'>for</span> <span class='ident'>KeyedCount</span><span class='op'>&lt;</span><span class='ident'>K</span><span class='op'>&gt;</span> {
+    <span class='kw'>fn</span> <span class='ident'>clone</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='kw'>Self</span> {
+        <span class='ident'>KeyedCount</span> {
+            <span class='ident'>back_end</span>: <span class='self'>self</span>.<span class='ident'>back_end</span>.<span class='ident'>clone</span>()
+        }
+    }
+
+}
 
 <span class='doccomment'>///</span>
 <span class='doccomment'>///</span>
@@ -824,6 +904,16 @@
             <span class='ident'>back_end</span>: <span class='ident'>BackEnd</span>::<span class='ident'>new</span>(<span class='ident'>feature</span>, <span class='ident'>key</span>),
         }
     }
+}
+
+<span class='kw'>impl</span><span class='op'>&lt;</span><span class='ident'>K</span>, <span class='ident'>T</span><span class='op'>&gt;</span> <span class='ident'>Clone</span> <span class='kw'>for</span> <span class='ident'>KeyedEnum</span><span class='op'>&lt;</span><span class='ident'>K</span>, <span class='ident'>T</span><span class='op'>&gt;</span> <span class='kw'>where</span> <span class='ident'>K</span>: <span class='ident'>ToString</span>, <span class='ident'>T</span>: <span class='ident'>Flatten</span> {
+    <span class='kw'>fn</span> <span class='ident'>clone</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='kw'>Self</span> {
+        <span class='ident'>KeyedEnum</span> {
+            <span class='ident'>back_end</span>: <span class='self'>self</span>.<span class='ident'>back_end</span>.<span class='ident'>clone</span>(),
+            <span class='ident'>witness</span>: <span class='ident'>PhantomData</span>,
+        }
+    }
+
 }
 </pre>
 </section>

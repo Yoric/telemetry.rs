@@ -45,10 +45,16 @@
             <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                 [<span class='inner'>&#x2212;</span>]
             </a>
-        </span><a id='src-3086' class='srclink' href='../src/telemetry/service.rs.html#89-105' title='goto source code'>[src]</a></span></h1>
+        </span><a id='src-3406' class='srclink' href='../src/telemetry/service.rs.html#96-112' title='goto source code'>[src]</a></span></h1>
 <pre class='rust struct'>pub struct Service {
     // some fields omitted
 }</pre><h2 id='methods'>Methods</h2><h3 class='impl'><code>impl <a class='struct' href='../telemetry/struct.Service.html' title='telemetry::Service'>Service</a></code></h3><div class='docblock'><p>The Telemetry service.</p>
+
+<p>The service is in charge of maintaining the data recorded by the
+histograms. Each application using telemetry needs one instance of
+the service (or more, but this should seldom be necessary). The
+data is stored and processed in a dedicated background thread and
+the memory is recollected only when the service is dropped.</p>
 
 <h1 id="panics" class='section-header'><a
                            href="#panics">Panics</a></h1>
@@ -67,7 +73,9 @@ is complete.</p>
 
 <p>Any data recorded on a histogram while the service is inactive will be ignored.</p>
 </div><h4 id='method.is_active' class='method'><code>fn <a href='#method.is_active' class='fnname'>is_active</a>(&amp;self) -&gt; <a href='http://doc.rust-lang.org/nightly/std/primitive.bool.html'>bool</a></code></h4>
-</div><h2 id='implementations'>Trait Implementations</h2><h3 class='impl'><code>impl <a class='trait' href='http://doc.rust-lang.org/nightly/core/ops/trait.Drop.html' title='core::ops::Drop'>Drop</a> for <a class='struct' href='../telemetry/struct.Service.html' title='telemetry::Service'>Service</a></code></h3><div class='impl-items'><h4 id='method.drop' class='method'><code>fn <a href='http://doc.rust-lang.org/nightly/core/ops/trait.Drop.html#method.drop' class='fnname'>drop</a>(&amp;mut self)</code></h4>
+</div><h2 id='implementations'>Trait Implementations</h2><h3 class='impl'><code>impl <a class='trait' href='http://doc.rust-lang.org/nightly/core/ops/trait.Drop.html' title='core::ops::Drop'>Drop</a> for <a class='struct' href='../telemetry/struct.Service.html' title='telemetry::Service'>Service</a></code></h3><div class='docblock'><p>Upon death of the service, terminate the thread and recollect all
+owned memory.</p>
+</div><div class='impl-items'><h4 id='method.drop' class='method'><code>fn <a href='http://doc.rust-lang.org/nightly/core/ops/trait.Drop.html#method.drop' class='fnname'>drop</a>(&amp;mut self)</code></h4>
 </div></section>
     <section id='search' class="content hidden"></section>
 

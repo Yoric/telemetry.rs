@@ -1,1 +1,1 @@
-initSidebarItems({"enum":[["SerializationFormat",""],["Subset",""]],"mod":[["keyed",""],["plain",""]],"struct":[["Service",""]],"trait":[["Flatten",""]]});
+initSidebarItems({"enum":[["SerializationFormat",""],["Subset",""]],"mod":[["keyed","Definition of keyed histograms, for data in a set known dynamically."],["plain","Definition of plain histograms, for data in a set known at compile-time."]],"struct":[["Service",""]],"trait":[["Flatten",""]]});

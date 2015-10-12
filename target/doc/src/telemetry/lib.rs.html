@@ -95,6 +95,26 @@
 <span id="53">53</span>
 <span id="54">54</span>
 <span id="55">55</span>
+<span id="56">56</span>
+<span id="57">57</span>
+<span id="58">58</span>
+<span id="59">59</span>
+<span id="60">60</span>
+<span id="61">61</span>
+<span id="62">62</span>
+<span id="63">63</span>
+<span id="64">64</span>
+<span id="65">65</span>
+<span id="66">66</span>
+<span id="67">67</span>
+<span id="68">68</span>
+<span id="69">69</span>
+<span id="70">70</span>
+<span id="71">71</span>
+<span id="72">72</span>
+<span id="73">73</span>
+<span id="74">74</span>
+<span id="75">75</span>
 </pre><pre class='rust '>
 <span class='doccomment'>//! Telemetry is a mechanism used to capture metrics in an application,</span>
 <span class='doccomment'>//! to later store the data locally or upload it to a server for</span>
@@ -135,18 +155,38 @@
 
 
 <span class='kw'>mod</span> <span class='ident'>misc</span>;
-<span class='kw'>pub</span> <span class='kw'>use</span> <span class='ident'>misc</span>::{<span class='ident'>Flatten</span>, <span class='ident'>SerializationFormat</span>, <span class='ident'>Subset</span>};
+
+<span class='doccomment'>/// Data that may be converted to numbers for storage in a histogram.</span>
+<span class='kw'>pub</span> <span class='kw'>use</span> <span class='ident'>misc</span>::<span class='ident'>Flatten</span>;
+
+<span class='doccomment'>/// A serialization format, as a subset of Json.</span>
+<span class='kw'>pub</span> <span class='kw'>use</span> <span class='ident'>misc</span>::<span class='ident'>SerializationFormat</span>;
+
+<span class='doccomment'>/// A subset of data to export.</span>
+<span class='kw'>pub</span> <span class='kw'>use</span> <span class='ident'>misc</span>::<span class='ident'>Subset</span>;
 
 <span class='kw'>mod</span> <span class='ident'>indexing</span>;
 
 <span class='kw'>mod</span> <span class='ident'>task</span>;
 
+<span class='doccomment'>/// Definition of plain histograms, for data in a set known at compile-time.</span>
 <span class='kw'>pub</span> <span class='kw'>mod</span> <span class='ident'>plain</span>;
-<span class='kw'>pub</span> <span class='kw'>mod</span> <span class='ident'>keyed</span>;
-<span class='kw'>mod</span> <span class='ident'>service</span>;
-<span class='kw'>pub</span> <span class='kw'>use</span> <span class='ident'>service</span>::<span class='ident'>Service</span>;
-<span class='kw'>pub</span> <span class='kw'>use</span> <span class='ident'>keyed</span>::<span class='ident'>KeyedHistogram</span>;
+
+<span class='doccomment'>/// Plain histograms.</span>
 <span class='kw'>pub</span> <span class='kw'>use</span> <span class='ident'>plain</span>::<span class='ident'>Histogram</span>;
+
+<span class='doccomment'>/// Definition of keyed histograms, for data in a set known dynamically.</span>
+<span class='kw'>pub</span> <span class='kw'>mod</span> <span class='ident'>keyed</span>;
+
+<span class='doccomment'>/// Keyed histograms.</span>
+<span class='kw'>pub</span> <span class='kw'>use</span> <span class='ident'>keyed</span>::<span class='ident'>KeyedHistogram</span>;
+
+<span class='kw'>mod</span> <span class='ident'>service</span>;
+
+<span class='doccomment'>/// The Telemetry Service. You need one (or more) per application.</span>
+<span class='kw'>pub</span> <span class='kw'>use</span> <span class='ident'>service</span>::<span class='ident'>Service</span>;
+
+
 
 
 
