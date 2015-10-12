@@ -45,12 +45,20 @@
             <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                 [<span class='inner'>&#x2212;</span>]
             </a>
-        </span><a id='src-2632' class='srclink' href='../src/telemetry/service.rs.html#85-94' title='goto source code'>[src]</a></span></h1>
+        </span><a id='src-2632' class='srclink' href='../src/telemetry/service.rs.html#96-105' title='goto source code'>[src]</a></span></h1>
 <pre class='rust struct'>pub struct Service {
     // some fields omitted
-}</pre><h2 id='methods'>Methods</h2><h3 class='impl'><code>impl <a class='struct' href='../telemetry/struct.Service.html' title='telemetry::Service'>Service</a></code></h3><div class='impl-items'><h4 id='method.new' class='method'><code>fn <a href='#method.new' class='fnname'>new</a>() -&gt; <a class='struct' href='../telemetry/struct.Service.html' title='telemetry::Service'>Service</a></code></h4>
-<h4 id='method.serialize' class='method'><code>fn <a href='#method.serialize' class='fnname'>serialize</a>(&amp;self, format: <a class='enum' href='../telemetry/enum.SerializationFormat.html' title='telemetry::SerializationFormat'>SerializationFormat</a>, sender: <a class='struct' href='http://doc.rust-lang.org/nightly/std/sync/mpsc/struct.Sender.html' title='std::sync::mpsc::Sender'>Sender</a>&lt;<a href='http://doc.rust-lang.org/nightly/std/primitive.tuple.html'>(<a class='enum' href='http://doc.rust-lang.org/rustc-serialize/rustc_serialize/json/enum.Json.html' title='rustc_serialize::json::Json'>Json</a>, <a class='enum' href='http://doc.rust-lang.org/rustc-serialize/rustc_serialize/json/enum.Json.html' title='rustc_serialize::json::Json'>Json</a>)</a>&gt;)</code></h4>
-</div><h2 id='implementations'>Trait Implementations</h2><h3 class='impl'><code>impl <a class='trait' href='http://doc.rust-lang.org/nightly/core/ops/trait.Drop.html' title='core::ops::Drop'>Drop</a> for <a class='struct' href='../telemetry/struct.Service.html' title='telemetry::Service'>Service</a></code></h3><div class='impl-items'><h4 id='method.drop' class='method'><code>fn <a href='http://doc.rust-lang.org/nightly/core/ops/trait.Drop.html#method.drop' class='fnname'>drop</a>(&amp;mut self)</code></h4>
+}</pre><h2 id='methods'>Methods</h2><h3 class='impl'><code>impl <a class='struct' href='../telemetry/struct.Service.html' title='telemetry::Service'>Service</a></code></h3><div class='docblock'><p>The Telemetry service.</p>
+
+<p>Generally, an application will have only a single instance of this
+service but may have any number of instances of <code>Feature</code> which may
+be activated and deactivated individually.</p>
+</div><div class='impl-items'><h4 id='method.new' class='method'><code>fn <a href='#method.new' class='fnname'>new</a>() -&gt; <a class='struct' href='../telemetry/struct.Service.html' title='telemetry::Service'>Service</a></code></h4>
+<h4 id='method.to_json' class='method'><code>fn <a href='#method.to_json' class='fnname'>to_json</a>(&amp;self, format: <a class='enum' href='../telemetry/enum.SerializationFormat.html' title='telemetry::SerializationFormat'>SerializationFormat</a>, sender: <a class='struct' href='http://doc.rust-lang.org/nightly/std/sync/mpsc/struct.Sender.html' title='std::sync::mpsc::Sender'>Sender</a>&lt;<a href='http://doc.rust-lang.org/nightly/std/primitive.tuple.html'>(<a class='enum' href='http://doc.rust-lang.org/rustc-serialize/rustc_serialize/json/enum.Json.html' title='rustc_serialize::json::Json'>Json</a>, <a class='enum' href='http://doc.rust-lang.org/rustc-serialize/rustc_serialize/json/enum.Json.html' title='rustc_serialize::json::Json'>Json</a>)</a>&gt;)</code></h4>
+<div class='docblock'><p>Serialize all histograms as json, in a given format.</p>
+
+<p>Returns a pair with plain histograms/keyed histograms.</p>
+</div></div><h2 id='implementations'>Trait Implementations</h2><h3 class='impl'><code>impl <a class='trait' href='http://doc.rust-lang.org/nightly/core/ops/trait.Drop.html' title='core::ops::Drop'>Drop</a> for <a class='struct' href='../telemetry/struct.Service.html' title='telemetry::Service'>Service</a></code></h3><div class='impl-items'><h4 id='method.drop' class='method'><code>fn <a href='http://doc.rust-lang.org/nightly/core/ops/trait.Drop.html#method.drop' class='fnname'>drop</a>(&amp;mut self)</code></h4>
 </div></section>
     <section id='search' class="content hidden"></section>
 
