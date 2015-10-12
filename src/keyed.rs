@@ -121,7 +121,7 @@ impl KeyedRawStorage for KeyedFlagStorage {
     fn store(&mut self, k: String, _: u32) {
         self.encountered.insert(k);
     }
-    fn serialize(&self, format: &SerializationFormat) -> Json {
+    fn to_json(&self, format: &SerializationFormat) -> Json {
         match format {
             &SerializationFormat::SimpleJson => {
                 // Collect and sort the keys.
@@ -204,7 +204,7 @@ impl KeyedRawStorage for KeyedLinearStorage {
             }
         }
     }
-    fn serialize(&self, _: &SerializationFormat) -> Json {
+    fn to_json(&self, _: &SerializationFormat) -> Json {
         // Sort keys, for easier testing/comparison.
         let mut values : Vec<_> = self.values.iter().collect();
         values.sort();
@@ -278,7 +278,7 @@ impl KeyedRawStorage for KeyedCountStorage {
             }
         }
     }
-    fn serialize(&self, format: &SerializationFormat) -> Json {
+    fn to_json(&self, format: &SerializationFormat) -> Json {
         match format {
             &SerializationFormat::SimpleJson => {
                 // Sort keys, for easier testing/comparison.

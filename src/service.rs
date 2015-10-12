@@ -10,15 +10,21 @@ use misc::*;
 use task::{Op, SingleRawStorage, KeyedRawStorage, TelemetryTask};
 use indexing::*;
 
-//
-// A group of histograms observed by Telemetry.
-//
+///
+/// A group of histograms observed by Telemetry.
+///
+/// Many applications need to activate/deactivate measurements
+/// dynamically, based e.g. on user preferences, privacy settings,
+/// startup/shutdown sequence, etc. All histograms are created as part
+/// of a `Feature`, which can be used to turn on/off all the
+/// histograms that it owns.
+///
 impl Feature {
-    //
-    // Create a new feature.
-    //
-    // New features are deactivated by default.
-    //
+    ///
+    /// Create a new feature.
+    ///
+    /// New features are **deactivated** by default.
+    ///
     pub fn new(service: &Arc<Service>) -> Feature {
         Feature {
             is_active: Arc::new(Cell::new(false)),
@@ -36,13 +42,13 @@ impl Feature {
     }
 }
 
-//
-// The Telemetry service.
-//
-// Generally, an application will have only a single instance of this
-// service but may have any number of instances of `Feature` which may
-// be activated and deactivated individually.
-//
+///
+/// The Telemetry service.
+///
+/// Generally, an application will have only a single instance of this
+/// service but may have any number of instances of `Feature` which may
+/// be activated and deactivated individually.
+///
 impl Service {
     pub fn new() -> Service {
         let (sender, receiver) = channel();
@@ -57,7 +63,11 @@ impl Service {
         }
     }
 
-    pub fn serialize(&self, format: SerializationFormat, sender: Sender<(Json, Json)>) {
+    ///
+    /// Serialize all histograms as json, in a given format.
+    ///
+    /// Returns a pair with plain histograms/keyed histograms.
+    pub fn to_json(&self, format: SerializationFormat, sender: Sender<(Json, Json)>) {
         self.sender.send(Op::Serialize(format, sender)).unwrap();
     }
 
@@ -77,6 +87,7 @@ impl Service {
 }
 
 impl Drop for Service {
+    /// Terminate the thread once the service is dead.
     fn drop(&mut self) {
         let _ = self.sender.send(Op::Terminate);
     }
@@ -101,6 +112,7 @@ pub struct Feature {
 }
 
 
+// Backstage pass used inside the crate.
 pub struct PrivateAccess;
 
 impl PrivateAccess {

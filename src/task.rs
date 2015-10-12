@@ -19,11 +19,11 @@ use service::{Feature, PrivateAccess};
 //
 pub trait SingleRawStorage: Send {
     fn store(&mut self, value: u32);
-    fn serialize(&self, &SerializationFormat) -> Json;
+    fn to_json(&self, &SerializationFormat) -> Json;
 }
 pub trait KeyedRawStorage: Send {
     fn store(&mut self, key: String, value: u32);
-    fn serialize(&self, format: &SerializationFormat) -> Json;
+    fn to_json(&self, format: &SerializationFormat) -> Json;
 }
 
 
@@ -78,12 +78,12 @@ impl TelemetryTask {
                 Op::Serialize(format, sender) => {
                     let mut single_object = BTreeMap::new();
                     for ref histogram in self.single.values() {
-                        single_object.insert(histogram.name.clone(), histogram.contents.serialize(&format));
+                        single_object.insert(histogram.name.clone(), histogram.contents.to_json(&format));
                     }
 
                     let mut keyed_object = BTreeMap::new();
                     for ref histogram in self.keyed.values() {
-                        keyed_object.insert(histogram.name.clone(), histogram.contents.serialize(&format));
+                        keyed_object.insert(histogram.name.clone(), histogram.contents.to_json(&format));
                     }
 
                     sender.send((Json::Object(single_object), Json::Object(keyed_object))).unwrap();

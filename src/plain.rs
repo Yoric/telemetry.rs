@@ -112,7 +112,7 @@ impl SingleRawStorage for FlagStorage {
     fn store(&mut self, _: u32) {
         self.encountered = true;
     }
-    fn serialize(&self, format: &SerializationFormat) -> Json {
+    fn to_json(&self, format: &SerializationFormat) -> Json {
         match format {
             &SerializationFormat::SimpleJson => {
                 Json::I64(if self.encountered { 1 } else { 0 })
@@ -217,7 +217,7 @@ impl SingleRawStorage for LinearStorage {
         let index = self.shape.get_bucket(value);
         self.values[index] += 1;
     }
-    fn serialize(&self, _: &SerializationFormat) -> Json {
+    fn to_json(&self, _: &SerializationFormat) -> Json {
         Json::Array(self.values.iter().map(|&x| Json::I64(x as i64)).collect())
     }
 }
@@ -245,7 +245,7 @@ impl SingleRawStorage for CountStorage {
     fn store(&mut self, value: u32) {
         self.value += value;
     }
-    fn serialize(&self, format: &SerializationFormat) -> Json {
+    fn to_json(&self, format: &SerializationFormat) -> Json {
         match format {
             &SerializationFormat::SimpleJson => {
                 Json::I64(self.value as i64)
