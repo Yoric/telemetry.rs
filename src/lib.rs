@@ -49,12 +49,12 @@ mod indexing;
 
 mod task;
 
-pub mod single;
+pub mod plain;
 pub mod keyed;
 mod service;
 pub use service::{Feature, Service};
 pub use keyed::KeyedHistogram;
-pub use single::Histogram;
+pub use plain::Histogram;
 
 
 

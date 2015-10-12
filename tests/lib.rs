@@ -13,14 +13,14 @@ use telemetry::*;
 fn create_flags() {
     let telemetry = Arc::new(Service::new());
     let feature = Feature::new(&telemetry);
-    let flag_single = single::Flag::new(&feature, "Test linear single".to_string());
+    let flag_plain = plain::Flag::new(&feature, "Test linear plain".to_string());
     let flag_map = keyed::KeyedFlag::new(&feature, "Test flag map".to_string());
 
-    flag_single.record(());
+    flag_plain.record(());
     flag_map.record("key".to_string(), ());
 
     feature.set_active(true);
-    flag_single.record(());
+    flag_plain.record(());
     flag_map.record("key".to_string(), ());
 }
 
@@ -28,20 +28,20 @@ fn create_flags() {
 fn create_linears() {
     let telemetry = Arc::new(Service::new());
     let feature = Feature::new(&telemetry);
-    let linear_single =
-        single::Linear::new(&feature,
-                            "Test linear single".to_string(),
+    let linear_plain =
+        plain::Linear::new(&feature,
+                            "Test linear plain".to_string(),
                             0, 100, 10);
     let linear_map =
         keyed::KeyedLinear::new(&feature,
                                 "Test linear map".to_string(),
                                 0, 100, 10);
 
-    linear_single.record(0);
+    linear_plain.record(0);
     linear_map.record("key".to_string(), 0);
 
     feature.set_active(true);
-    linear_single.record(0);
+    linear_plain.record(0);
     linear_map.record("key".to_string(), 0);
 }
 
@@ -50,9 +50,9 @@ fn create_linears() {
 fn create_linears_bad_1() {
     let telemetry = Arc::new(Service::new());
     let feature = Feature::new(&telemetry);
-    let _ : single::Linear<u32> =
-        single::Linear::new(&feature,
-                            "Test linear single".to_string(),
+    let _ : plain::Linear<u32> =
+        plain::Linear::new(&feature,
+                            "Test linear plain".to_string(),
                             0, 100, 0); // Not enough histograms.
 
 }
@@ -62,9 +62,9 @@ fn create_linears_bad_1() {
 fn create_linears_bad_2() {
     let telemetry = Arc::new(Service::new());
     let feature = Feature::new(&telemetry);
-    let _ : single::Linear<u32> =
-        single::Linear::new(&feature,
-                            "Test linear single".to_string(),
+    let _ : plain::Linear<u32> =
+        plain::Linear::new(&feature,
+                            "Test linear plain".to_string(),
                             0, 0, 1); // min >= max
 
 }
@@ -74,9 +74,9 @@ fn create_linears_bad_2() {
 fn create_linears_bad_3() {
     let telemetry = Arc::new(Service::new());
     let feature = Feature::new(&telemetry);
-    let _ : single::Linear<u32> =
-        single::Linear::new(&feature,
-                            "Test linear single".to_string(),
+    let _ : plain::Linear<u32> =
+        plain::Linear::new(&feature,
+                            "Test linear plain".to_string(),
                             0, 10, 20); // Not enough histograms.
 
 }
@@ -90,15 +90,15 @@ fn test_serialize_simple() {
 
     ////////// Test flags
 
-    // A single flag that will remain untouched.
-    let flag_single_1_name = "Test flag single 1".to_string();
-    let flag_single_1 = single::Flag::new(&feature, flag_single_1_name.clone());
-    let _ = flag_single_1; // Silence an unused variable warning.
+    // A plain flag that will remain untouched.
+    let flag_plain_1_name = "Test flag plain 1".to_string();
+    let flag_plain_1 = plain::Flag::new(&feature, flag_plain_1_name.clone());
+    let _ = flag_plain_1; // Silence an unused variable warning.
 
-    // A single flag that will be recorded once.
-    let flag_single_2_name = "Test flag single 2".to_string();
-    let flag_single_2 = single::Flag::new(&feature, flag_single_2_name.clone());
-    flag_single_2.record(());
+    // A plain flag that will be recorded once.
+    let flag_plain_2_name = "Test flag plain 2".to_string();
+    let flag_plain_2 = plain::Flag::new(&feature, flag_plain_2_name.clone());
+    flag_plain_2.record(());
 
     // A map flag.
     let flag_map_name = "Test flag map".to_string();
@@ -111,14 +111,14 @@ fn test_serialize_simple() {
     // Serialize and check the results.
     let (sender, receiver) = channel();
     telemetry.serialize(SerializationFormat::SimpleJson, sender.clone());
-    let (single, keyed) = receiver.recv().unwrap();
+    let (plain, keyed) = receiver.recv().unwrap();
 
-    // Compare the single stuff.
+    // Compare the plain stuff.
     // We're making sure that only our histograms appear.
-    let mut all_flag_single = BTreeMap::new();
-    all_flag_single.insert(flag_single_1_name.clone(), Json::I64(0));
-    all_flag_single.insert(flag_single_2_name.clone(), Json::I64(1));
-    assert_eq!(single, Json::Object(all_flag_single));
+    let mut all_flag_plain = BTreeMap::new();
+    all_flag_plain.insert(flag_plain_1_name.clone(), Json::I64(0));
+    all_flag_plain.insert(flag_plain_2_name.clone(), Json::I64(1));
+    assert_eq!(plain, Json::Object(all_flag_plain));
 
     // Compare the map stuff.
     // We're making sure that only our histograms appear.
@@ -133,12 +133,12 @@ fn test_serialize_simple() {
 
     ////////// Test linears
 
-    // Add a single linear histogram and fill it.
-    let linear_single_1 = single::Linear::new(&feature, "Test linear single".to_string(), 0, 100, 10);
-    linear_single_1.record(100);
-    linear_single_1.record(99);
-    linear_single_1.record(98);
-    linear_single_1.record(25);
+    // Add a plain linear histogram and fill it.
+    let linear_plain_1 = plain::Linear::new(&feature, "Test linear plain".to_string(), 0, 100, 10);
+    linear_plain_1.record(100);
+    linear_plain_1.record(99);
+    linear_plain_1.record(98);
+    linear_plain_1.record(25);
 
     // Add a keyed linear
     let linear_keyed_1 = keyed::KeyedLinear::new(&feature, "Test linear dynamic".to_string(), 0, 100, 10);
@@ -149,9 +149,9 @@ fn test_serialize_simple() {
 
     // Compare stuff.
     telemetry.serialize(SerializationFormat::SimpleJson, sender.clone());
-    let (single, keyed) = receiver.recv().unwrap();
-    if let Json::Object(single_btree) = single {
-        if let Some(&Json::Array(ref array)) = single_btree.get(&"Test linear single".to_string()) {
+    let (plain, keyed) = receiver.recv().unwrap();
+    if let Json::Object(plain_btree) = plain {
+        if let Some(&Json::Array(ref array)) = plain_btree.get(&"Test linear plain".to_string()) {
             let expect : Vec<Json> = vec![0, 0, 1, 0, 0, 0, 0, 0, 0, 3].iter().cloned().map(Json::I64).collect();
             assert_eq!(*array, expect);
         } else {
@@ -185,7 +185,7 @@ fn test_serialize_simple() {
 
 
     ////////// Test count
-    let count_1 = single::Count::new(&feature, "Count 1".to_string());
+    let count_1 = plain::Count::new(&feature, "Count 1".to_string());
     count_1.record(5);
     count_1.record(3);
     count_1.record(7);
@@ -197,9 +197,9 @@ fn test_serialize_simple() {
     keyed_count_1.record("Key C".to_string(), 1);
 
     telemetry.serialize(SerializationFormat::SimpleJson, sender.clone());
-    let (single, keyed) = receiver.recv().unwrap();
-    if let Json::Object(single_btree) = single {
-        if let Some(&Json::I64(ref num)) = single_btree.get(&"Count 1".to_string()) {
+    let (plain, keyed) = receiver.recv().unwrap();
+    if let Json::Object(plain_btree) = plain {
+        if let Some(&Json::I64(ref num)) = plain_btree.get(&"Count 1".to_string()) {
             assert_eq!(*num, 15);
         } else {
             panic!("No record for the histogram or not a num");

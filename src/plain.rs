@@ -1,9 +1,10 @@
 //!
-//! Definition of single (aka "regular") histograms.
+//! Definition of histograms.
 //!
-//! Single histograms represent measures on a set of entities known at
-//! compile-time. If the set of entities is dynamically extensible,
-//! you should rather used Keyed histograms.
+//! Histograms represent measures on a set of entities known at
+//! compile-time. In some cases, the set of entities is not known
+//! at compile-time (e.g. plug-ins, dates), in which case you should
+//! rather use [Keyed histograms](../keyed.index.html).
 //!
 
 use rustc_serialize::json::Json;
