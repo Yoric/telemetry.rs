@@ -11,3 +11,6 @@ license="MIT"
 [dependencies]
 rustc-serialize = "0.3"
 vec_map = "0.3.0"
+
+[dev-dependencies]
+time = "0.1.32"
