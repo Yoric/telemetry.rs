@@ -221,3 +221,58 @@ impl SingleRawStorage for LinearStorage {
     }
 }
 
+///
+///
+/// Count histograms.
+///
+/// A Count histogram simply accumulates the numbers passed with `record()`.
+///
+///
+/// With `SerializationFormat::SimpleJson`, these histograms are
+/// serialized as a single number.
+///
+pub struct Count {
+    back_end: BackEnd<Single>,
+}
+
+// The storage, owned by the Telemetry Task.
+struct CountStorage {
+    value: u32
+}
+
+impl SingleRawStorage for CountStorage {
+    fn store(&mut self, value: u32) {
+        self.value += value;
+    }
+    fn serialize(&self, format: &SerializationFormat) -> Json {
+        match format {
+            &SerializationFormat::SimpleJson => {
+                Json::I64(self.value as i64)
+            }
+        }
+    }
+}
+
+impl Histogram<u32> for Count {
+    fn record_cb<F>(&self, cb: F) where F: FnOnce() -> Option<u32>  {
+        if let Some(k) = self.back_end.get_key() {
+            match cb() {
+                None => {}
+                Some(v) => {
+                    self.back_end.raw_record(&k, v)
+                }
+            }
+        }
+    }
+}
+
+
+impl Count {
+    pub fn new(feature: &Feature, name: String) -> Count {
+        let storage = Box::new(CountStorage { value: 0 });
+        let key = PrivateAccess::register_single(feature, name, storage);
+        Count {
+            back_end: BackEnd::new(feature, key),
+        }
+    }
+}

@@ -88,6 +88,8 @@ fn test_serialize_simple() {
 
     feature.set_active(true);
 
+    ////////// Test flags
+
     // A single flag that will remain untouched.
     let flag_single_1_name = "Test flag single 1".to_string();
     let flag_single_1 = single::Flag::new(&feature, flag_single_1_name.clone());
@@ -129,6 +131,7 @@ fn test_serialize_simple() {
 
     assert_eq!(keyed, Json::Object(all_flag_map));
 
+    ////////// Test linears
 
     // Add a single linear histogram and fill it.
     let linear_single_1 = single::Linear::new(&feature, "Test linear single".to_string(), 0, 100, 10);
@@ -149,7 +152,8 @@ fn test_serialize_simple() {
     let (single, keyed) = receiver.recv().unwrap();
     if let Json::Object(single_btree) = single {
         if let Some(&Json::Array(ref array)) = single_btree.get(&"Test linear single".to_string()) {
-            assert_eq!(*array, vec![Json::I64(0), Json::I64(0), Json::I64(1), Json::I64(0), Json::I64(0), Json::I64(0), Json::I64(0), Json::I64(0), Json::I64(0), Json::I64(3)]);
+            let expect : Vec<Json> = vec![0, 0, 1, 0, 0, 0, 0, 0, 0, 3].iter().cloned().map(Json::I64).collect();
+            assert_eq!(*array, expect);
         } else {
             panic!("No record for the histogram");
         }
@@ -174,6 +178,42 @@ fn test_serialize_simple() {
             }
         } else {
             panic!("No record for the histogram");
+        }
+    } else {
+        panic!("Not a Json object");
+    }
+
+
+    ////////// Test count
+    let count_1 = single::Count::new(&feature, "Count 1".to_string());
+    count_1.record(5);
+    count_1.record(3);
+    count_1.record(7);
+
+    let keyed_count_1 = keyed::KeyedCount::new(&feature, "Keyed count 1".to_string());
+    keyed_count_1.record("Key A".to_string(), 31);
+    keyed_count_1.record("Key B".to_string(), 100);
+    keyed_count_1.record("Key A".to_string(), 61);
+    keyed_count_1.record("Key C".to_string(), 1);
+
+    telemetry.serialize(SerializationFormat::SimpleJson, sender.clone());
+    let (single, keyed) = receiver.recv().unwrap();
+    if let Json::Object(single_btree) = single {
+        if let Some(&Json::I64(ref num)) = single_btree.get(&"Count 1".to_string()) {
+            assert_eq!(*num, 15);
+        } else {
+            panic!("No record for the histogram or not a num");
+        }
+    } else {
+        panic!("Not a Json object");
+    }
+
+    if let Json::Object(keyed_btree) = keyed {
+        if let Some(ref hist) = keyed_btree.get(&"Keyed count 1".to_string()) {
+            let json = format!("{}", hist);
+            assert_eq!(json, "{\"Key A\":92,\"Key B\":100,\"Key C\":1}");
+        } else {
+            panic!("No record for the histogram or not an object");
         }
     } else {
         panic!("Not a Json object");

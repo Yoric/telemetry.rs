@@ -2,6 +2,7 @@
 //! to later store the data locally or upload it to a server for
 //! statistical analysis.
 //!
+//!
 //! Examples of usage:
 //!
 //! - capturing the speed of an operation;
@@ -12,6 +13,7 @@
 //! - capturing the operations that slow down the application;
 //! - determining the amount of I/O performed by the application;
 //! - ...
+//!
 //!
 //! To make use of Telemetry, an application needs:
 //!
@@ -31,7 +33,11 @@
 //! words, if a histogram goes out of scope for some reason, its data
 //! remains in telemetry and will be stored and/or uploaded in
 //! accordance with the configuration of this telemetry instance.
-
+//!
+//! See [Mozilla Telemetry
+//! Server](https://github.com/mozilla/telemetry-server) for an
+//! open-source implementation of a server implementing the Telemetry
+//! protocol.
 
 extern crate rustc_serialize;
 

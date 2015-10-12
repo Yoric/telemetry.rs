@@ -246,3 +246,76 @@ impl<K, T> KeyedHistogram<K, T> for KeyedLinear<K, T> where K: ToString, T: Flat
     }
 }
 
+///
+///
+/// Count histograms.
+///
+/// A Count histogram simply accumulates the numbers passed with `record()`.
+///
+///
+/// With `SerializationFormat::SimpleJson`, these histograms are
+/// serialized as an object, with keys sorted, in which each field is
+/// a number.
+///
+pub struct KeyedCount<K> {
+    back_end: BackEnd<Keyed<K>>,
+}
+
+// The storage, owned by the Telemetry Task.
+struct KeyedCountStorage {
+    values: HashMap<String, u32>,
+}
+
+impl KeyedRawStorage for KeyedCountStorage {
+    fn store(&mut self, key: String, value: u32) {
+        match self.values.entry(key) {
+            Occupied(mut e) => {
+                let v = e.get().clone();
+                e.insert(v + value);
+            }
+            Vacant(e) => {
+                e.insert(value);
+            }
+        }
+    }
+    fn serialize(&self, format: &SerializationFormat) -> Json {
+        match format {
+            &SerializationFormat::SimpleJson => {
+                // Sort keys, for easier testing/comparison.
+                let mut values : Vec<_> = self.values.iter().collect();
+                values.sort();
+                // Turn everything into an object.
+                let mut tree = BTreeMap::new();
+                for value in values {
+                    let (name, val) = value;
+                    tree.insert(name.clone(), Json::I64(val.clone() as i64));
+                }
+                Json::Object(tree)
+            }
+        }
+    }
+}
+
+impl<K> KeyedHistogram<K, u32> for KeyedCount<K> where K: ToString {
+    fn record_cb<F>(&self, cb: F) where F: FnOnce() -> Option<(K, u32)>  {
+        if let Some(k) = self.back_end.get_key() {
+            match cb() {
+                None => {}
+                Some((key, v)) => {
+                    self.back_end.raw_record(&k, key.to_string(), v)
+                }
+            }
+        }
+    }
+}
+
+
+impl<K> KeyedCount<K> {
+    pub fn new(feature: &Feature, name: String) -> KeyedCount<K> {
+        let storage = Box::new(KeyedCountStorage { values: HashMap::new() });
+        let key = PrivateAccess::register_keyed(feature, name, storage);
+        KeyedCount {
+            back_end: BackEnd::new(feature, key),
+        }
+    }
+}
