@@ -1,1 +1,1 @@
-initSidebarItems({"struct":[["KeyedCount",""],["KeyedFlag",""],["KeyedIgnoring",""],["KeyedLinear",""]],"trait":[["KeyedHistogram",""]]});
+initSidebarItems({"struct":[["KeyedCount",""],["KeyedEnum",""],["KeyedFlag",""],["KeyedIgnoring",""],["KeyedLinear",""]],"trait":[["KeyedHistogram",""]]});

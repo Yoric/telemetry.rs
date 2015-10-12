@@ -45,12 +45,15 @@
             <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                 [<span class='inner'>&#x2212;</span>]
             </a>
-        </span><a id='src-1323' class='srclink' href='../../src/telemetry/plain.rs.html#235-237' title='goto source code'>[src]</a></span></h1>
+        </span><a id='src-1442' class='srclink' href='../../src/telemetry/plain.rs.html#240-242' title='goto source code'>[src]</a></span></h1>
 <pre class='rust struct'>pub struct Count {
     // some fields omitted
 }</pre><div class='docblock'><p>Count histograms.</p>
 
-<p>A Count histogram simply accumulates the numbers passed with <code>record()</code>.</p>
+<p>A Count histogram simply accumulates the numbers passed with
+<code>record()</code>. Count histograms are useful, for instance, to know how
+many times a feature has been used, or how many times an error has
+been triggered.</p>
 
 <p>With <code>SerializationFormat::SimpleJson</code>, these histograms are
 serialized as a single number.</p>

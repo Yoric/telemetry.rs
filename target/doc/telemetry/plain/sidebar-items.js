@@ -1,1 +1,1 @@
-initSidebarItems({"struct":[["Count",""],["Flag",""],["Ignoring",""],["Linear",""]],"trait":[["Histogram",""]]});
+initSidebarItems({"struct":[["Count",""],["Enum",""],["Flag",""],["Ignoring",""],["Linear",""]],"trait":[["Histogram",""]]});

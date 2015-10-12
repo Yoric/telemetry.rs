@@ -45,7 +45,7 @@
             <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                 [<span class='inner'>&#x2212;</span>]
             </a>
-        </span><a id='src-783' class='srclink' href='../../src/telemetry/plain.rs.html#24-48' title='goto source code'>[src]</a></span></h1>
+        </span><a id='src-893' class='srclink' href='../../src/telemetry/plain.rs.html#24-48' title='goto source code'>[src]</a></span></h1>
 <pre class='rust trait'>pub trait Histogram&lt;T&gt; {
     fn <a href='#tymethod.record_cb' class='fnname'>record_cb</a>&lt;F&gt;(&amp;self, _: F) <span class='where'>where F: <a class='trait' href='http://doc.rust-lang.org/nightly/core/ops/trait.FnOnce.html' title='core::ops::FnOnce'>FnOnce</a>() -&gt; <a class='enum' href='http://doc.rust-lang.org/nightly/core/option/enum.Option.html' title='core::option::Option'>Option</a>&lt;T&gt;</span>;
 
@@ -78,6 +78,7 @@
 <li><code>impl <a class='trait' href='../../telemetry/plain/trait.Histogram.html' title='telemetry::plain::Histogram'>Histogram</a>&lt;<a href='http://doc.rust-lang.org/nightly/std/primitive.tuple.html'>()</a>&gt; for <a class='struct' href='../../telemetry/plain/struct.Flag.html' title='telemetry::plain::Flag'>Flag</a></code></li>
 <li><code>impl&lt;T&gt; <a class='trait' href='../../telemetry/plain/trait.Histogram.html' title='telemetry::plain::Histogram'>Histogram</a>&lt;T&gt; for <a class='struct' href='../../telemetry/plain/struct.Linear.html' title='telemetry::plain::Linear'>Linear</a>&lt;T&gt; <span class='where'>where T: <a class='trait' href='../../telemetry/trait.Flatten.html' title='telemetry::Flatten'>Flatten</a></span></code></li>
 <li><code>impl <a class='trait' href='../../telemetry/plain/trait.Histogram.html' title='telemetry::plain::Histogram'>Histogram</a>&lt;<a href='http://doc.rust-lang.org/nightly/std/primitive.u32.html'>u32</a>&gt; for <a class='struct' href='../../telemetry/plain/struct.Count.html' title='telemetry::plain::Count'>Count</a></code></li>
+<li><code>impl&lt;K&gt; <a class='trait' href='../../telemetry/plain/trait.Histogram.html' title='telemetry::plain::Histogram'>Histogram</a>&lt;K&gt; for <a class='struct' href='../../telemetry/plain/struct.Enum.html' title='telemetry::plain::Enum'>Enum</a>&lt;K&gt; <span class='where'>where K: <a class='trait' href='../../telemetry/trait.Flatten.html' title='telemetry::Flatten'>Flatten</a></span></code></li>
 </ul><script type="text/javascript" async
                               src="../../implementors/telemetry/plain/trait.Histogram.js">
                       </script></section>
