@@ -45,12 +45,28 @@
             <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                 [<span class='inner'>&#x2212;</span>]
             </a>
-        </span><a id='src-982' class='srclink' href='../../src/telemetry/plain.rs.html#24-42' title='goto source code'>[src]</a></span></h1>
+        </span><a id='src-1091' class='srclink' href='../../src/telemetry/plain.rs.html#40-58' title='goto source code'>[src]</a></span></h1>
 <pre class='rust trait'>pub trait Histogram&lt;T&gt;: <a class='trait' href='http://doc.rust-lang.org/nightly/core/clone/trait.Clone.html' title='core::clone::Clone'>Clone</a> {
     fn <a href='#tymethod.record_cb' class='fnname'>record_cb</a>&lt;F&gt;(&amp;self, _: F) <span class='where'>where F: <a class='trait' href='http://doc.rust-lang.org/nightly/core/ops/trait.FnOnce.html' title='core::ops::FnOnce'>FnOnce</a>() -&gt; <a class='enum' href='http://doc.rust-lang.org/nightly/core/option/enum.Option.html' title='core::option::Option'>Option</a>&lt;T&gt;</span>;
 
     fn <a href='#method.record' class='fnname'>record</a>(&amp;self, value: T) { ... }
 }</pre><div class='docblock'><p>A plain histogram.</p>
+
+<p>Histograms do not implement <code>Sync</code>, so an instance of <code>Histogram</code>
+cannot be shared by several threads. However, any histogram can be
+cloned as needed for concurrent use.</p>
+
+<h1 id="performance" class='section-header'><a
+                           href="#performance">Performance</a></h1>
+<p>Cloning a histogram is relatively cheap, both in terms of memory
+and in terms of speed (most histograms weigh ~40bytes on a x86-64
+architecture).</p>
+
+<p>When the telemetry service is inactive, recording data to a
+histogram is very fast (essentially a dereference and an atomic
+fetch). When the telemetry service is active, the duration of
+recording data is comparable to the duration of sending a simple
+message to a <code>Sender</code>.</p>
 </div>
             <h2 id='required-methods'>Required Methods</h2>
             <div class='methods'>

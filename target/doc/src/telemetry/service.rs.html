@@ -175,6 +175,15 @@
 <span id="133">133</span>
 <span id="134">134</span>
 <span id="135">135</span>
+<span id="136">136</span>
+<span id="137">137</span>
+<span id="138">138</span>
+<span id="139">139</span>
+<span id="140">140</span>
+<span id="141">141</span>
+<span id="142">142</span>
+<span id="143">143</span>
+<span id="144">144</span>
 </pre><pre class='rust '>
 <span class='kw'>extern</span> <span class='kw'>crate</span> <span class='ident'>rustc_serialize</span>;
 <span class='kw'>use</span> <span class='self'>self</span>::<span class='ident'>rustc_serialize</span>::<span class='ident'>json</span>::<span class='ident'>Json</span>;
@@ -203,6 +212,15 @@
 <span class='doccomment'>/// histograms with the same key.</span>
 <span class='doccomment'>///</span>
 <span class='kw'>impl</span> <span class='ident'>Service</span> {
+    <span class='doccomment'>///</span>
+    <span class='doccomment'>/// Create a new instance of the service.</span>
+    <span class='doccomment'>///</span>
+    <span class='doccomment'>/// This immediately launches the thread owning the data.</span>
+    <span class='doccomment'>///</span>
+    <span class='doccomment'>/// If `is_active` is `false`, the service will immediately accept</span>
+    <span class='doccomment'>/// records. Otherwise, the service will only start recording once</span>
+    <span class='doccomment'>/// `set_active(true)` has been called.</span>
+    <span class='doccomment'>///</span>
     <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>new</span>(<span class='ident'>is_active</span>: <span class='ident'>bool</span>) <span class='op'>-&gt;</span> <span class='ident'>Service</span> {
         <span class='kw'>let</span> (<span class='ident'>sender</span>, <span class='ident'>receiver</span>) <span class='op'>=</span> <span class='ident'>channel</span>();
         <span class='ident'>thread</span>::<span class='ident'>spawn</span>(<span class='op'>||</span> {

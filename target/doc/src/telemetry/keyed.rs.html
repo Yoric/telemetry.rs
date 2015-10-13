@@ -477,6 +477,92 @@
 <span id="435">435</span>
 <span id="436">436</span>
 <span id="437">437</span>
+<span id="438">438</span>
+<span id="439">439</span>
+<span id="440">440</span>
+<span id="441">441</span>
+<span id="442">442</span>
+<span id="443">443</span>
+<span id="444">444</span>
+<span id="445">445</span>
+<span id="446">446</span>
+<span id="447">447</span>
+<span id="448">448</span>
+<span id="449">449</span>
+<span id="450">450</span>
+<span id="451">451</span>
+<span id="452">452</span>
+<span id="453">453</span>
+<span id="454">454</span>
+<span id="455">455</span>
+<span id="456">456</span>
+<span id="457">457</span>
+<span id="458">458</span>
+<span id="459">459</span>
+<span id="460">460</span>
+<span id="461">461</span>
+<span id="462">462</span>
+<span id="463">463</span>
+<span id="464">464</span>
+<span id="465">465</span>
+<span id="466">466</span>
+<span id="467">467</span>
+<span id="468">468</span>
+<span id="469">469</span>
+<span id="470">470</span>
+<span id="471">471</span>
+<span id="472">472</span>
+<span id="473">473</span>
+<span id="474">474</span>
+<span id="475">475</span>
+<span id="476">476</span>
+<span id="477">477</span>
+<span id="478">478</span>
+<span id="479">479</span>
+<span id="480">480</span>
+<span id="481">481</span>
+<span id="482">482</span>
+<span id="483">483</span>
+<span id="484">484</span>
+<span id="485">485</span>
+<span id="486">486</span>
+<span id="487">487</span>
+<span id="488">488</span>
+<span id="489">489</span>
+<span id="490">490</span>
+<span id="491">491</span>
+<span id="492">492</span>
+<span id="493">493</span>
+<span id="494">494</span>
+<span id="495">495</span>
+<span id="496">496</span>
+<span id="497">497</span>
+<span id="498">498</span>
+<span id="499">499</span>
+<span id="500">500</span>
+<span id="501">501</span>
+<span id="502">502</span>
+<span id="503">503</span>
+<span id="504">504</span>
+<span id="505">505</span>
+<span id="506">506</span>
+<span id="507">507</span>
+<span id="508">508</span>
+<span id="509">509</span>
+<span id="510">510</span>
+<span id="511">511</span>
+<span id="512">512</span>
+<span id="513">513</span>
+<span id="514">514</span>
+<span id="515">515</span>
+<span id="516">516</span>
+<span id="517">517</span>
+<span id="518">518</span>
+<span id="519">519</span>
+<span id="520">520</span>
+<span id="521">521</span>
+<span id="522">522</span>
+<span id="523">523</span>
 </pre><pre class='rust '>
 <span class='doccomment'>//!</span>
 <span class='doccomment'>//! Definition of keyed (aka &quot;dynamic family of&quot;) histograms.</span>
@@ -494,14 +580,32 @@
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>marker</span>::<span class='ident'>PhantomData</span>;
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>mem</span>::<span class='ident'>size_of</span>;
 
-<span class='kw'>use</span> <span class='ident'>misc</span>::{<span class='ident'>Flatten</span>, <span class='ident'>LinearBuckets</span>, <span class='ident'>SerializationFormat</span>, <span class='ident'>vec_with_size</span>};
+<span class='kw'>use</span> <span class='ident'>misc</span>::{<span class='ident'>Flatten</span>, <span class='ident'>LinearBuckets</span>, <span class='ident'>SerializationFormat</span>, <span class='ident'>vec_resize</span>, <span class='ident'>vec_with_size</span>};
 <span class='kw'>use</span> <span class='ident'>task</span>::{<span class='ident'>BackEnd</span>, <span class='ident'>Op</span>, <span class='ident'>KeyedRawStorage</span>};
 <span class='kw'>use</span> <span class='ident'>service</span>::{<span class='ident'>Service</span>, <span class='ident'>PrivateAccess</span>};
 <span class='kw'>use</span> <span class='ident'>indexing</span>::<span class='op'>*</span>;
 
+<span class='doccomment'>///</span>
 <span class='doccomment'>/// A family of histograms, indexed by some dynamic value. Use these</span>
 <span class='doccomment'>/// to monitor families of values that cannot be determined at</span>
 <span class='doccomment'>/// compile-time, e.g. add-ons, programs, etc.</span>
+<span class='doccomment'>///</span>
+<span class='doccomment'>/// Histograms do not implement `Sync`, so an instance of</span>
+<span class='doccomment'>/// `KeyedHistogram` cannot be shared by several threads. However, any</span>
+<span class='doccomment'>/// histogram can be cloned as needed for concurrent use.</span>
+<span class='doccomment'>///</span>
+<span class='doccomment'>/// # Performance</span>
+<span class='comment'>////</span>
+<span class='doccomment'>/// Cloning a histogram is relatively cheap, both in terms of memory</span>
+<span class='doccomment'>/// and in terms of speed (most histograms weigh ~40bytes on a x86-64</span>
+<span class='doccomment'>/// architecture).</span>
+<span class='doccomment'>///</span>
+<span class='doccomment'>/// When the telemetry service is inactive, recording data to a</span>
+<span class='doccomment'>/// histogram is very fast (essentially a dereference and an atomic</span>
+<span class='doccomment'>/// fetch). When the telemetry service is active, the duration of</span>
+<span class='doccomment'>/// recording data is comparable to the duration of sending a simple</span>
+<span class='doccomment'>/// message to a `Sender`.</span>
+<span class='doccomment'>///</span>
 <span class='kw'>pub</span> <span class='kw'>trait</span> <span class='ident'>KeyedHistogram</span><span class='op'>&lt;</span><span class='ident'>K</span>, <span class='ident'>T</span><span class='op'>&gt;</span> : <span class='ident'>Clone</span> {
     <span class='doccomment'>///</span>
     <span class='doccomment'>/// Record a value in this histogram.</span>
@@ -559,6 +663,12 @@
 }
 
 <span class='kw'>impl</span><span class='op'>&lt;</span><span class='ident'>T</span>, <span class='ident'>U</span><span class='op'>&gt;</span> <span class='ident'>KeyedIgnoring</span><span class='op'>&lt;</span><span class='ident'>T</span>, <span class='ident'>U</span><span class='op'>&gt;</span> {
+    <span class='comment'>//</span>
+    <span class='comment'>// Create an histogram that ignores any input.</span>
+    <span class='comment'>//</span>
+    <span class='comment'>// `KeyedIgnoring` histograms are effectively implemented as empty</span>
+    <span class='comment'>// structs, without a back-end, so they take no memory.</span>
+    <span class='comment'>//</span>
     <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>new</span>() <span class='op'>-&gt;</span> <span class='ident'>KeyedIgnoring</span><span class='op'>&lt;</span><span class='ident'>T</span>, <span class='ident'>U</span><span class='op'>&gt;</span> {
         <span class='ident'>KeyedIgnoring</span> {
             <span class='ident'>witness</span>: <span class='ident'>PhantomData</span>
@@ -601,11 +711,11 @@
 
 
 <span class='kw'>impl</span><span class='op'>&lt;</span><span class='ident'>K</span><span class='op'>&gt;</span> <span class='ident'>KeyedFlag</span><span class='op'>&lt;</span><span class='ident'>K</span><span class='op'>&gt;</span> <span class='kw'>where</span> <span class='ident'>K</span>: <span class='ident'>ToString</span> {
-    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>new</span>(<span class='ident'>feature</span>: <span class='kw-2'>&amp;</span><span class='ident'>Service</span>, <span class='ident'>name</span>: <span class='ident'>String</span>) <span class='op'>-&gt;</span> <span class='ident'>KeyedFlag</span><span class='op'>&lt;</span><span class='ident'>K</span><span class='op'>&gt;</span> {
+    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>new</span>(<span class='ident'>service</span>: <span class='kw-2'>&amp;</span><span class='ident'>Service</span>, <span class='ident'>name</span>: <span class='ident'>String</span>) <span class='op'>-&gt;</span> <span class='ident'>KeyedFlag</span><span class='op'>&lt;</span><span class='ident'>K</span><span class='op'>&gt;</span> {
         <span class='kw'>let</span> <span class='ident'>storage</span> <span class='op'>=</span> <span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='ident'>KeyedFlagStorage</span> { <span class='ident'>encountered</span>: <span class='ident'>HashSet</span>::<span class='ident'>new</span>() });
-        <span class='kw'>let</span> <span class='ident'>key</span> <span class='op'>=</span> <span class='ident'>PrivateAccess</span>::<span class='ident'>register_keyed</span>(<span class='ident'>feature</span>, <span class='ident'>name</span>, <span class='ident'>storage</span>);
+        <span class='kw'>let</span> <span class='ident'>key</span> <span class='op'>=</span> <span class='ident'>PrivateAccess</span>::<span class='ident'>register_keyed</span>(<span class='ident'>service</span>, <span class='ident'>name</span>, <span class='ident'>storage</span>);
         <span class='ident'>KeyedFlag</span> {
-            <span class='ident'>back_end</span>: <span class='ident'>BackEnd</span>::<span class='ident'>new</span>(<span class='ident'>feature</span>, <span class='ident'>key</span>),
+            <span class='ident'>back_end</span>: <span class='ident'>BackEnd</span>::<span class='ident'>new</span>(<span class='ident'>service</span>, <span class='ident'>key</span>),
         }
     }
 }
@@ -722,16 +832,53 @@
 
 
 <span class='kw'>impl</span><span class='op'>&lt;</span><span class='ident'>K</span>, <span class='ident'>T</span><span class='op'>&gt;</span> <span class='ident'>KeyedLinear</span><span class='op'>&lt;</span><span class='ident'>K</span>, <span class='ident'>T</span><span class='op'>&gt;</span> <span class='kw'>where</span> <span class='ident'>K</span>: <span class='ident'>ToString</span>, <span class='ident'>T</span>: <span class='ident'>Flatten</span> {
-    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>new</span>(<span class='ident'>feature</span>: <span class='kw-2'>&amp;</span><span class='ident'>Service</span>, <span class='ident'>name</span>: <span class='ident'>String</span>, <span class='ident'>min</span>: <span class='ident'>u32</span>, <span class='ident'>max</span>: <span class='ident'>u32</span>, <span class='ident'>buckets</span>: <span class='ident'>usize</span>) <span class='op'>-&gt;</span> <span class='ident'>KeyedLinear</span><span class='op'>&lt;</span><span class='ident'>K</span>, <span class='ident'>T</span><span class='op'>&gt;</span> {
+    <span class='doccomment'>///</span>
+    <span class='doccomment'>/// Create a new Linear histogram with a given name.</span>
+    <span class='doccomment'>///</span>
+    <span class='doccomment'>/// Argument `name` is used as key when processing and exporting</span>
+    <span class='doccomment'>/// the data. Each `name` must be unique to the `Service`.</span>
+    <span class='doccomment'>///</span>
+    <span class='doccomment'>/// `min` is the minimal value expected to be entered in this</span>
+    <span class='doccomment'>/// histogram. Any value lower than `min` is rounded up to `min`.</span>
+    <span class='doccomment'>///</span>
+    <span class='doccomment'>/// `max` is the maximal value expected to be entered in this</span>
+    <span class='doccomment'>/// histogram. Any value higher than `max` is rounded up to `max`.</span>
+    <span class='doccomment'>///</span>
+    <span class='doccomment'>/// `buckets` is the number of buckets in this histogram. For</span>
+    <span class='doccomment'>/// highest possible precision, use `buckets = max - min + 1`.</span>
+    <span class='doccomment'>/// In most cases, however, such precision is not needed, so you</span>
+    <span class='doccomment'>/// should use a lower number of buckets.</span>
+    <span class='doccomment'>///</span>
+    <span class='doccomment'>///</span>
+    <span class='doccomment'>/// # Performance</span>
+    <span class='doccomment'>///</span>
+    <span class='doccomment'>/// Increasing the number of buckets increases the memory usage on</span>
+    <span class='doccomment'>/// the client by a few bytes per bucket per key. More</span>
+    <span class='doccomment'>/// importantly, it also increases the size of the payload, hence</span>
+    <span class='doccomment'>/// the total amount of data that the application will eventually</span>
+    <span class='doccomment'>/// upload to a central server. If your application has many</span>
+    <span class='doccomment'>/// clients and you wish to keep your server happy and your</span>
+    <span class='doccomment'>/// bandwidth costs manageable, don&#39;t use too many buckets.</span>
+    <span class='doccomment'>///</span>
+    <span class='doccomment'>///</span>
+    <span class='doccomment'>/// # Panics</span>
+    <span class='doccomment'>///</span>
+    <span class='doccomment'>/// If `name` is already used by another histogram in `service`.</span>
+    <span class='doccomment'>///</span>
+    <span class='doccomment'>/// If `min &gt;= max`.</span>
+    <span class='doccomment'>///</span>
+    <span class='doccomment'>/// If `buckets &lt; max - min + 1`.</span>
+    <span class='doccomment'>///</span>
+    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>new</span>(<span class='ident'>service</span>: <span class='kw-2'>&amp;</span><span class='ident'>Service</span>, <span class='ident'>name</span>: <span class='ident'>String</span>, <span class='ident'>min</span>: <span class='ident'>u32</span>, <span class='ident'>max</span>: <span class='ident'>u32</span>, <span class='ident'>buckets</span>: <span class='ident'>usize</span>) <span class='op'>-&gt;</span> <span class='ident'>KeyedLinear</span><span class='op'>&lt;</span><span class='ident'>K</span>, <span class='ident'>T</span><span class='op'>&gt;</span> {
         <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>size_of</span>::<span class='op'>&lt;</span><span class='ident'>u32</span><span class='op'>&gt;</span>() <span class='op'>&lt;=</span> <span class='ident'>size_of</span>::<span class='op'>&lt;</span><span class='ident'>usize</span><span class='op'>&gt;</span>());
         <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>min</span> <span class='op'>&lt;</span> <span class='ident'>max</span>);
         <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>max</span> <span class='op'>-</span> <span class='ident'>min</span> <span class='op'>&gt;=</span> <span class='ident'>buckets</span> <span class='kw'>as</span> <span class='ident'>u32</span>);
         <span class='kw'>let</span> <span class='ident'>shape</span> <span class='op'>=</span> <span class='ident'>KeyedLinearBuckets</span>::<span class='ident'>new</span>(<span class='ident'>min</span>, <span class='ident'>max</span>, <span class='ident'>buckets</span>);
         <span class='kw'>let</span> <span class='ident'>storage</span> <span class='op'>=</span> <span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='ident'>KeyedLinearStorage</span>::<span class='ident'>new</span>(<span class='ident'>shape</span>));
-        <span class='kw'>let</span> <span class='ident'>key</span> <span class='op'>=</span> <span class='ident'>PrivateAccess</span>::<span class='ident'>register_keyed</span>(<span class='ident'>feature</span>, <span class='ident'>name</span>, <span class='ident'>storage</span>);
+        <span class='kw'>let</span> <span class='ident'>key</span> <span class='op'>=</span> <span class='ident'>PrivateAccess</span>::<span class='ident'>register_keyed</span>(<span class='ident'>service</span>, <span class='ident'>name</span>, <span class='ident'>storage</span>);
         <span class='ident'>KeyedLinear</span> {
             <span class='ident'>witness</span>: <span class='ident'>PhantomData</span>,
-            <span class='ident'>back_end</span>: <span class='ident'>BackEnd</span>::<span class='ident'>new</span>(<span class='ident'>feature</span>, <span class='ident'>key</span>),
+            <span class='ident'>back_end</span>: <span class='ident'>BackEnd</span>::<span class='ident'>new</span>(<span class='ident'>service</span>, <span class='ident'>key</span>),
         }
     }
 }
@@ -810,11 +957,21 @@
 
 
 <span class='kw'>impl</span><span class='op'>&lt;</span><span class='ident'>K</span><span class='op'>&gt;</span> <span class='ident'>KeyedCount</span><span class='op'>&lt;</span><span class='ident'>K</span><span class='op'>&gt;</span> {
-    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>new</span>(<span class='ident'>feature</span>: <span class='kw-2'>&amp;</span><span class='ident'>Service</span>, <span class='ident'>name</span>: <span class='ident'>String</span>) <span class='op'>-&gt;</span> <span class='ident'>KeyedCount</span><span class='op'>&lt;</span><span class='ident'>K</span><span class='op'>&gt;</span> {
+    <span class='doccomment'>///</span>
+    <span class='doccomment'>/// Create a new KeyedCount histogram with a given name.</span>
+    <span class='doccomment'>///</span>
+    <span class='doccomment'>/// Argument `name` is used as key when processing and exporting</span>
+    <span class='doccomment'>/// the data. Each `name` must be unique to the `Service`.</span>
+    <span class='doccomment'>///</span>
+    <span class='doccomment'>/// # Panics</span>
+    <span class='doccomment'>///</span>
+    <span class='doccomment'>/// If `name` is already used by another histogram in `service`.</span>
+    <span class='doccomment'>///</span>
+    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>new</span>(<span class='ident'>service</span>: <span class='kw-2'>&amp;</span><span class='ident'>Service</span>, <span class='ident'>name</span>: <span class='ident'>String</span>) <span class='op'>-&gt;</span> <span class='ident'>KeyedCount</span><span class='op'>&lt;</span><span class='ident'>K</span><span class='op'>&gt;</span> {
         <span class='kw'>let</span> <span class='ident'>storage</span> <span class='op'>=</span> <span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='ident'>KeyedCountStorage</span> { <span class='ident'>values</span>: <span class='ident'>HashMap</span>::<span class='ident'>new</span>() });
-        <span class='kw'>let</span> <span class='ident'>key</span> <span class='op'>=</span> <span class='ident'>PrivateAccess</span>::<span class='ident'>register_keyed</span>(<span class='ident'>feature</span>, <span class='ident'>name</span>, <span class='ident'>storage</span>);
+        <span class='kw'>let</span> <span class='ident'>key</span> <span class='op'>=</span> <span class='ident'>PrivateAccess</span>::<span class='ident'>register_keyed</span>(<span class='ident'>service</span>, <span class='ident'>name</span>, <span class='ident'>storage</span>);
         <span class='ident'>KeyedCount</span> {
-            <span class='ident'>back_end</span>: <span class='ident'>BackEnd</span>::<span class='ident'>new</span>(<span class='ident'>feature</span>, <span class='ident'>key</span>),
+            <span class='ident'>back_end</span>: <span class='ident'>BackEnd</span>::<span class='ident'>new</span>(<span class='ident'>service</span>, <span class='ident'>key</span>),
         }
     }
 }
@@ -850,18 +1007,19 @@
 <span class='comment'>// The storage, owned by the Telemetry Task.</span>
 <span class='kw'>struct</span> <span class='ident'>KeyedEnumStorage</span> {
     <span class='ident'>values</span>: <span class='ident'>HashMap</span><span class='op'>&lt;</span><span class='ident'>String</span>, <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>u32</span><span class='op'>&gt;&gt;</span>,
-    <span class='ident'>buckets</span>: <span class='ident'>usize</span>,
 }
 
 <span class='kw'>impl</span> <span class='ident'>KeyedRawStorage</span> <span class='kw'>for</span> <span class='ident'>KeyedEnumStorage</span> {
     <span class='kw'>fn</span> <span class='ident'>store</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='self'>self</span>, <span class='ident'>key</span>: <span class='ident'>String</span>, <span class='ident'>value</span>: <span class='ident'>u32</span>) {
         <span class='kw'>match</span> <span class='self'>self</span>.<span class='ident'>values</span>.<span class='ident'>entry</span>(<span class='ident'>key</span>) {
             <span class='ident'>Occupied</span>(<span class='kw-2'>mut</span> <span class='ident'>e</span>) <span class='op'>=&gt;</span> {
-                <span class='kw'>let</span> <span class='ident'>vec</span> <span class='op'>=</span> <span class='ident'>e</span>.<span class='ident'>get_mut</span>();
+                <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>vec</span> <span class='op'>=</span> <span class='ident'>e</span>.<span class='ident'>get_mut</span>();
+                <span class='ident'>vec_resize</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>vec</span>, <span class='ident'>value</span> <span class='kw'>as</span> <span class='ident'>usize</span> <span class='op'>+</span> <span class='number'>1</span>, <span class='number'>0</span>);
                 <span class='ident'>vec</span>[<span class='ident'>value</span> <span class='kw'>as</span> <span class='ident'>usize</span>] <span class='op'>+=</span> <span class='number'>1</span>;
             }
             <span class='ident'>Vacant</span>(<span class='ident'>e</span>) <span class='op'>=&gt;</span> {
-                <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>vec</span> <span class='op'>=</span> <span class='ident'>vec_with_size</span>(<span class='self'>self</span>.<span class='ident'>buckets</span>, <span class='number'>0</span>);
+                <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>vec</span> <span class='op'>=</span> <span class='ident'>Vec</span>::<span class='ident'>new</span>();
+                <span class='ident'>vec_resize</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>vec</span>, <span class='ident'>value</span> <span class='kw'>as</span> <span class='ident'>usize</span> <span class='op'>+</span> <span class='number'>1</span>, <span class='number'>0</span>);
                 <span class='ident'>vec</span>[<span class='ident'>value</span> <span class='kw'>as</span> <span class='ident'>usize</span>] <span class='op'>=</span> <span class='number'>1</span>;
                 <span class='ident'>e</span>.<span class='ident'>insert</span>(<span class='ident'>vec</span>);
             }
@@ -887,21 +1045,35 @@
 }
 
 <span class='kw'>impl</span><span class='op'>&lt;</span><span class='ident'>K</span>, <span class='ident'>T</span><span class='op'>&gt;</span> <span class='ident'>KeyedHistogram</span><span class='op'>&lt;</span><span class='ident'>K</span>, <span class='ident'>T</span><span class='op'>&gt;</span> <span class='kw'>for</span> <span class='ident'>KeyedEnum</span><span class='op'>&lt;</span><span class='ident'>K</span>, <span class='ident'>T</span><span class='op'>&gt;</span> <span class='kw'>where</span> <span class='ident'>K</span>: <span class='ident'>ToString</span>, <span class='ident'>T</span>: <span class='ident'>Flatten</span> {
+    <span class='doccomment'>///</span>
+    <span class='doccomment'>/// Record a value.</span>
+    <span class='doccomment'>///</span>
+    <span class='doccomment'>/// Actual recording takes place on the background thread.</span>
+    <span class='doccomment'>///</span>
     <span class='kw'>fn</span> <span class='ident'>record_cb</span><span class='op'>&lt;</span><span class='ident'>F</span><span class='op'>&gt;</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>cb</span>: <span class='ident'>F</span>) <span class='kw'>where</span> <span class='ident'>F</span>: <span class='ident'>FnOnce</span>() <span class='op'>-&gt;</span> <span class='prelude-ty'>Option</span><span class='op'>&lt;</span>(<span class='ident'>K</span>, <span class='ident'>T</span>)<span class='op'>&gt;</span>  {
         <span class='self'>self</span>.<span class='ident'>back_end</span>.<span class='ident'>raw_record_cb</span>(<span class='ident'>cb</span>);
     }
 }
 
 <span class='kw'>impl</span><span class='op'>&lt;</span><span class='ident'>K</span>, <span class='ident'>T</span><span class='op'>&gt;</span> <span class='ident'>KeyedEnum</span><span class='op'>&lt;</span><span class='ident'>K</span>, <span class='ident'>T</span><span class='op'>&gt;</span> <span class='kw'>where</span> <span class='ident'>K</span>: <span class='ident'>ToString</span>, <span class='ident'>T</span>:<span class='ident'>Flatten</span> {
-    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>new</span>(<span class='ident'>feature</span>: <span class='kw-2'>&amp;</span><span class='ident'>Service</span>, <span class='ident'>name</span>: <span class='ident'>String</span>, <span class='ident'>buckets</span>: <span class='ident'>usize</span>) <span class='op'>-&gt;</span> <span class='ident'>KeyedEnum</span><span class='op'>&lt;</span><span class='ident'>K</span>, <span class='ident'>T</span><span class='op'>&gt;</span> {
+    <span class='doccomment'>///</span>
+    <span class='doccomment'>/// Create a new Enum histogram with a given name.</span>
+    <span class='doccomment'>///</span>
+    <span class='doccomment'>/// Argument `name` is used as key when processing and exporting</span>
+    <span class='doccomment'>/// the data. Each `name` must be unique to the `Service`.</span>
+    <span class='doccomment'>///</span>
+    <span class='doccomment'>/// # Panics</span>
+    <span class='doccomment'>///</span>
+    <span class='doccomment'>/// If `name` is already used by another histogram in `service`.</span>
+    <span class='doccomment'>///</span>
+    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>new</span>(<span class='ident'>service</span>: <span class='kw-2'>&amp;</span><span class='ident'>Service</span>, <span class='ident'>name</span>: <span class='ident'>String</span>) <span class='op'>-&gt;</span> <span class='ident'>KeyedEnum</span><span class='op'>&lt;</span><span class='ident'>K</span>, <span class='ident'>T</span><span class='op'>&gt;</span> {
         <span class='kw'>let</span> <span class='ident'>storage</span> <span class='op'>=</span> <span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='ident'>KeyedEnumStorage</span> {
             <span class='ident'>values</span>: <span class='ident'>HashMap</span>::<span class='ident'>new</span>(),
-            <span class='ident'>buckets</span>: <span class='ident'>buckets</span>
         });
-        <span class='kw'>let</span> <span class='ident'>key</span> <span class='op'>=</span> <span class='ident'>PrivateAccess</span>::<span class='ident'>register_keyed</span>(<span class='ident'>feature</span>, <span class='ident'>name</span>, <span class='ident'>storage</span>);
+        <span class='kw'>let</span> <span class='ident'>key</span> <span class='op'>=</span> <span class='ident'>PrivateAccess</span>::<span class='ident'>register_keyed</span>(<span class='ident'>service</span>, <span class='ident'>name</span>, <span class='ident'>storage</span>);
         <span class='ident'>KeyedEnum</span> {
             <span class='ident'>witness</span>: <span class='ident'>PhantomData</span>,
-            <span class='ident'>back_end</span>: <span class='ident'>BackEnd</span>::<span class='ident'>new</span>(<span class='ident'>feature</span>, <span class='ident'>key</span>),
+            <span class='ident'>back_end</span>: <span class='ident'>BackEnd</span>::<span class='ident'>new</span>(<span class='ident'>service</span>, <span class='ident'>key</span>),
         }
     }
 }
