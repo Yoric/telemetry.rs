@@ -63,6 +63,16 @@ impl Flatten for () {
     }
 }
 
+impl Flatten for bool {
+    fn as_u32(&self) -> u32 {
+        if *self {
+            1
+        } else {
+            0
+        }
+    }
+}
+
 //
 // Representation of buckets shared by both plain and keyed linear histograms.
 //

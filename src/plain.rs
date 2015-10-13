@@ -95,12 +95,12 @@ pub struct Ignoring<T> {
 }
 
 impl<T> Ignoring<T> {
-    //
-    // Create an histogram that ignores any input.
-    //
-    // `Ignoring` histograms are effectively implemented as empty
-    // structs, without a back-end, so they take no memory.
-    //
+    ///
+    /// Create an histogram that ignores any input.
+    ///
+    /// `Ignoring` histograms are effectively implemented as empty
+    /// structs, without a back-end, so they take no memory.
+    ///
     pub fn new() -> Ignoring<T> {
         Ignoring {
             witness: PhantomData
@@ -212,9 +212,9 @@ impl Clone for Flag {
 ///
 ///
 /// Linear histograms classify numeric integer values into same-sized
-/// buckets. This type is typically used for percentages, or to store a
-/// relatively precise of the amount of resources (time, memory) used
-/// by a section.
+/// buckets. This type is typically used for percentages, or to store
+/// a relatively precise approximation of the amount of resources
+/// (time, memory) used by a section or a data structure.
 ///
 ///
 /// With `SerializationFormat::SimpleJson`, these histograms are
@@ -235,16 +235,16 @@ impl<T> Linear<T> where T: Flatten {
     ///
     /// Create a new Linear histogram with a given name.
     ///
-    /// Argument `name` is used as key when processing and exporting
+    /// - `name` is used as key when processing and exporting
     /// the data. Each `name` must be unique to the `Service`.
     ///
-    /// `min` is the minimal value expected to be entered in this
+    /// - `min` is the minimal value expected to be entered in this
     /// histogram. Any value lower than `min` is rounded up to `min`.
     ///
-    /// `max` is the maximal value expected to be entered in this
+    /// - `max` is the maximal value expected to be entered in this
     /// histogram. Any value higher than `max` is rounded up to `max`.
     ///
-    /// `buckets` is the number of buckets in this histogram. For
+    /// - `buckets` is the number of buckets in this histogram. For
     /// highest possible precision, use `buckets = max - min + 1`.
     /// In most cases, however, such precision is not needed, so you
     /// should use a lower number of buckets.
