@@ -1,3 +1,6 @@
+//! A simple example demonstrating how to use Telemetry to measure and
+//! store performance data, then eventually dump it to console/disk.
+
 use std::thread;
 use std::sync::mpsc::channel;
 use std::collections::BTreeMap;
