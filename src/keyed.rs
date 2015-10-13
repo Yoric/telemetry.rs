@@ -14,7 +14,7 @@ use std::collections::hash_map::Entry::{Occupied, Vacant};
 use std::marker::PhantomData;
 use std::mem::size_of;
 
-use misc::{Flatten, LinearBuckets, SerializationFormat, vec_with_size};
+use misc::{Flatten, LinearBuckets, SerializationFormat, vec_resize, vec_with_size};
 use task::{BackEnd, Op, KeyedRawStorage};
 use service::{Service, PrivateAccess};
 use indexing::*;
@@ -441,18 +441,19 @@ pub struct KeyedEnum<K, T> where K: ToString, T: Flatten {
 // The storage, owned by the Telemetry Task.
 struct KeyedEnumStorage {
     values: HashMap<String, Vec<u32>>,
-    buckets: usize,
 }
 
 impl KeyedRawStorage for KeyedEnumStorage {
     fn store(&mut self, key: String, value: u32) {
         match self.values.entry(key) {
             Occupied(mut e) => {
-                let vec = e.get_mut();
+                let mut vec = e.get_mut();
+                vec_resize(&mut vec, value as usize + 1, 0);
                 vec[value as usize] += 1;
             }
             Vacant(e) => {
-                let mut vec = vec_with_size(self.buckets, 0);
+                let mut vec = Vec::new();
+                vec_resize(&mut vec, value as usize + 1, 0);
                 vec[value as usize] = 1;
                 e.insert(vec);
             }
@@ -483,11 +484,6 @@ impl<K, T> KeyedHistogram<K, T> for KeyedEnum<K, T> where K: ToString, T: Flatte
     ///
     /// Actual recording takes place on the background thread.
     ///
-    /// # Panics
-    ///
-    /// If the result is larger than the value of `max` passed as
-    /// argument when constructing the histogram.
-    ///
     fn record_cb<F>(&self, cb: F) where F: FnOnce() -> Option<(K, T)>  {
         self.back_end.raw_record_cb(cb);
     }
@@ -500,21 +496,13 @@ impl<K, T> KeyedEnum<K, T> where K: ToString, T:Flatten {
     /// Argument `name` is used as key when processing and exporting
     /// the data. Each `name` must be unique to the `Service`.
     ///
-    /// `max` is the highest possible
-    /// [flattened](../trait.Flatten.html) value expected to be passed
-    /// to `record()`.
-    ///
-    ///
     /// # Panics
     ///
     /// If `name` is already used by another histogram in `service`.
     ///
-    /// If `max == 0`.
-    ///
-    pub fn new(service: &Service, name: String, buckets: usize) -> KeyedEnum<K, T> {
+    pub fn new(service: &Service, name: String) -> KeyedEnum<K, T> {
         let storage = Box::new(KeyedEnumStorage {
             values: HashMap::new(),
-            buckets: buckets
         });
         let key = PrivateAccess::register_keyed(service, name, storage);
         KeyedEnum {

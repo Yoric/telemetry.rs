@@ -238,12 +238,12 @@ fn test_serialize_simple() {
 
 
     ////////// Test Enum
-    let enum_1 = plain::Enum::new(&telemetry, "Enum 1".to_string(), 3);
+    let enum_1 = plain::Enum::new(&telemetry, "Enum 1".to_string());
     enum_1.record(TestEnum::Case2);
     enum_1.record(TestEnum::Case2);
     enum_1.record(TestEnum::Case3("foobar".to_string()));
 
-    let keyed_enum_1 = keyed::KeyedEnum::new(&telemetry, "Keyed enum 1".to_string(), 3);
+    let keyed_enum_1 = keyed::KeyedEnum::new(&telemetry, "Keyed enum 1".to_string());
     keyed_enum_1.record("Key 2".to_string(), TestEnum::Case1);
     keyed_enum_1.record("Key 1".to_string(), TestEnum::Case1);
     keyed_enum_1.record("Key 1".to_string(), TestEnum::Case2);
@@ -264,7 +264,7 @@ fn test_serialize_simple() {
     if let Json::Object(keyed_btree) = keyed {
         if let Some(ref hist) = keyed_btree.get(&"Keyed enum 1".to_string()) {
             let json = format!("{}", hist);
-            assert_eq!(json, "{\"Key 1\":[1,2,0],\"Key 2\":[1,0,0]}");
+            assert_eq!(json, "{\"Key 1\":[1,2],\"Key 2\":[1]}");
         } else {
             panic!("No record for the histogram");
         }

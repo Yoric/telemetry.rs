@@ -13,7 +13,7 @@ use std::marker::PhantomData;
 use std::mem::size_of;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use misc::{Flatten, LinearBuckets, SerializationFormat, vec_with_size};
+use misc::{Flatten, LinearBuckets, SerializationFormat, vec_resize, vec_with_size};
 use task::{BackEnd, Op, PlainRawStorage};
 use service::{Service, PrivateAccess};
 use indexing::*;
@@ -409,6 +409,7 @@ struct EnumStorage {
 
 impl PlainRawStorage for EnumStorage {
     fn store(&mut self, value: u32) {
+        vec_resize(&mut self.values, value as usize + 1, 0);
         self.values[value as usize] += 1;
     }
     fn to_json(&self, format: &SerializationFormat) -> Json {
@@ -421,16 +422,6 @@ impl PlainRawStorage for EnumStorage {
 }
 
 impl<K> Histogram<K> for Enum<K> where K: Flatten {
-    ///
-    /// Record a value.
-    ///
-    /// Actual recording takes place on the background thread.
-    ///
-    /// # Panics
-    ///
-    /// If the result is larger than the value of `max` passed as
-    /// argument when constructing the histogram.
-    ///
     fn record_cb<F>(&self, cb: F) where F: FnOnce() -> Option<K>  {
         self.back_end.raw_record_cb(cb);
     }
@@ -444,20 +435,12 @@ impl<K> Enum<K> where K: Flatten {
     /// Argument `name` is used as key when processing and exporting
     /// the data. Each `name` must be unique to the `Service`.
     ///
-    /// `max` is the highest possible
-    /// [flattened](../trait.Flatten.html) value expected to be passed
-    /// to `record()`.
-    ///
-    ///
     /// # Panics
     ///
     /// If `name` is already used by another histogram in `service`.
     ///
-    /// If `max == 0`.
-    ///
-    pub fn new(service: &Service, name: String, max: usize) -> Enum<K> {
-        assert!(max != 0);
-        let storage = Box::new(EnumStorage { values: vec_with_size(max, 0) });
+    pub fn new(service: &Service, name: String) -> Enum<K> {
+        let storage = Box::new(EnumStorage { values: Vec::new() });
         let key = PrivateAccess::register_plain(service, name, storage);
         Enum {
             witness: PhantomData,
