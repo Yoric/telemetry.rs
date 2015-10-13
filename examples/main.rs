@@ -6,6 +6,7 @@ use std::sync::mpsc::channel;
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::Write;
+use std::mem::*;
 
 extern crate rustc_serialize;
 use rustc_serialize::json::Json;

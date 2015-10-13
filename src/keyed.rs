@@ -19,9 +19,27 @@ use task::{BackEnd, Op, KeyedRawStorage};
 use service::{Service, PrivateAccess};
 use indexing::*;
 
+///
 /// A family of histograms, indexed by some dynamic value. Use these
 /// to monitor families of values that cannot be determined at
 /// compile-time, e.g. add-ons, programs, etc.
+///
+/// Histograms do not implement `Sync`, so an instance of
+/// `KeyedHistogram` cannot be shared by several threads. However, any
+/// histogram can be cloned as needed for concurrent use.
+///
+/// # Performance
+////
+/// Cloning a histogram is relatively cheap, both in terms of memory
+/// and in terms of speed (most histograms weigh ~40bytes on a x86-64
+/// architecture).
+///
+/// When the telemetry service is inactive, recording data to a
+/// histogram is very fast (essentially a dereference and an atomic
+/// fetch). When the telemetry service is active, the duration of
+/// recording data is comparable to the duration of sending a simple
+/// message to a `Sender`.
+///
 pub trait KeyedHistogram<K, T> : Clone {
     ///
     /// Record a value in this histogram.
@@ -79,6 +97,12 @@ pub struct KeyedIgnoring<T, U> {
 }
 
 impl<T, U> KeyedIgnoring<T, U> {
+    //
+    // Create an histogram that ignores any input.
+    //
+    // `KeyedIgnoring` histograms are effectively implemented as empty
+    // structs, without a back-end, so they take no memory.
+    //
     pub fn new() -> KeyedIgnoring<T, U> {
         KeyedIgnoring {
             witness: PhantomData
@@ -121,11 +145,11 @@ pub struct KeyedFlag<T> {
 
 
 impl<K> KeyedFlag<K> where K: ToString {
-    pub fn new(feature: &Service, name: String) -> KeyedFlag<K> {
+    pub fn new(service: &Service, name: String) -> KeyedFlag<K> {
         let storage = Box::new(KeyedFlagStorage { encountered: HashSet::new() });
-        let key = PrivateAccess::register_keyed(feature, name, storage);
+        let key = PrivateAccess::register_keyed(service, name, storage);
         KeyedFlag {
-            back_end: BackEnd::new(feature, key),
+            back_end: BackEnd::new(service, key),
         }
     }
 }
@@ -242,16 +266,53 @@ impl KeyedRawStorage for KeyedLinearStorage {
 
 
 impl<K, T> KeyedLinear<K, T> where K: ToString, T: Flatten {
-    pub fn new(feature: &Service, name: String, min: u32, max: u32, buckets: usize) -> KeyedLinear<K, T> {
+    ///
+    /// Create a new Linear histogram with a given name.
+    ///
+    /// Argument `name` is used as key when processing and exporting
+    /// the data. Each `name` must be unique to the `Service`.
+    ///
+    /// `min` is the minimal value expected to be entered in this
+    /// histogram. Any value lower than `min` is rounded up to `min`.
+    ///
+    /// `max` is the maximal value expected to be entered in this
+    /// histogram. Any value higher than `max` is rounded up to `max`.
+    ///
+    /// `buckets` is the number of buckets in this histogram. For
+    /// highest possible precision, use `buckets = max - min + 1`.
+    /// In most cases, however, such precision is not needed, so you
+    /// should use a lower number of buckets.
+    ///
+    ///
+    /// # Performance
+    ///
+    /// Increasing the number of buckets increases the memory usage on
+    /// the client by a few bytes per bucket per key. More
+    /// importantly, it also increases the size of the payload, hence
+    /// the total amount of data that the application will eventually
+    /// upload to a central server. If your application has many
+    /// clients and you wish to keep your server happy and your
+    /// bandwidth costs manageable, don't use too many buckets.
+    ///
+    ///
+    /// # Panics
+    ///
+    /// If `name` is already used by another histogram in `service`.
+    ///
+    /// If `min >= max`.
+    ///
+    /// If `buckets < max - min + 1`.
+    ///
+    pub fn new(service: &Service, name: String, min: u32, max: u32, buckets: usize) -> KeyedLinear<K, T> {
         assert!(size_of::<u32>() <= size_of::<usize>());
         assert!(min < max);
         assert!(max - min >= buckets as u32);
         let shape = KeyedLinearBuckets::new(min, max, buckets);
         let storage = Box::new(KeyedLinearStorage::new(shape));
-        let key = PrivateAccess::register_keyed(feature, name, storage);
+        let key = PrivateAccess::register_keyed(service, name, storage);
         KeyedLinear {
             witness: PhantomData,
-            back_end: BackEnd::new(feature, key),
+            back_end: BackEnd::new(service, key),
         }
     }
 }
@@ -330,11 +391,21 @@ impl<K> KeyedHistogram<K, u32> for KeyedCount<K> where K: ToString {
 
 
 impl<K> KeyedCount<K> {
-    pub fn new(feature: &Service, name: String) -> KeyedCount<K> {
+    ///
+    /// Create a new KeyedCount histogram with a given name.
+    ///
+    /// Argument `name` is used as key when processing and exporting
+    /// the data. Each `name` must be unique to the `Service`.
+    ///
+    /// # Panics
+    ///
+    /// If `name` is already used by another histogram in `service`.
+    ///
+    pub fn new(service: &Service, name: String) -> KeyedCount<K> {
         let storage = Box::new(KeyedCountStorage { values: HashMap::new() });
-        let key = PrivateAccess::register_keyed(feature, name, storage);
+        let key = PrivateAccess::register_keyed(service, name, storage);
         KeyedCount {
-            back_end: BackEnd::new(feature, key),
+            back_end: BackEnd::new(service, key),
         }
     }
 }
@@ -407,21 +478,48 @@ impl KeyedRawStorage for KeyedEnumStorage {
 }
 
 impl<K, T> KeyedHistogram<K, T> for KeyedEnum<K, T> where K: ToString, T: Flatten {
+    ///
+    /// Record a value.
+    ///
+    /// Actual recording takes place on the background thread.
+    ///
+    /// # Panics
+    ///
+    /// If the result is larger than the value of `max` passed as
+    /// argument when constructing the histogram.
+    ///
     fn record_cb<F>(&self, cb: F) where F: FnOnce() -> Option<(K, T)>  {
         self.back_end.raw_record_cb(cb);
     }
 }
 
 impl<K, T> KeyedEnum<K, T> where K: ToString, T:Flatten {
-    pub fn new(feature: &Service, name: String, buckets: usize) -> KeyedEnum<K, T> {
+    ///
+    /// Create a new Enum histogram with a given name.
+    ///
+    /// Argument `name` is used as key when processing and exporting
+    /// the data. Each `name` must be unique to the `Service`.
+    ///
+    /// `max` is the highest possible
+    /// [flattened](../trait.Flatten.html) value expected to be passed
+    /// to `record()`.
+    ///
+    ///
+    /// # Panics
+    ///
+    /// If `name` is already used by another histogram in `service`.
+    ///
+    /// If `max == 0`.
+    ///
+    pub fn new(service: &Service, name: String, buckets: usize) -> KeyedEnum<K, T> {
         let storage = Box::new(KeyedEnumStorage {
             values: HashMap::new(),
             buckets: buckets
         });
-        let key = PrivateAccess::register_keyed(feature, name, storage);
+        let key = PrivateAccess::register_keyed(service, name, storage);
         KeyedEnum {
             witness: PhantomData,
-            back_end: BackEnd::new(feature, key),
+            back_end: BackEnd::new(service, key),
         }
     }
 }

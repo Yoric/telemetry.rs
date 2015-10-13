@@ -21,6 +21,22 @@ use indexing::*;
 ///
 /// A plain histogram.
 ///
+/// Histograms do not implement `Sync`, so an instance of `Histogram`
+/// cannot be shared by several threads. However, any histogram can be
+/// cloned as needed for concurrent use.
+///
+/// # Performance
+////
+/// Cloning a histogram is relatively cheap, both in terms of memory
+/// and in terms of speed (most histograms weigh ~40bytes on a x86-64
+/// architecture).
+///
+/// When the telemetry service is inactive, recording data to a
+/// histogram is very fast (essentially a dereference and an atomic
+/// fetch). When the telemetry service is active, the duration of
+/// recording data is comparable to the duration of sending a simple
+/// message to a `Sender`.
+///
 pub trait Histogram<T> : Clone {
     ///
     /// Record a value in this histogram.
@@ -79,6 +95,12 @@ pub struct Ignoring<T> {
 }
 
 impl<T> Ignoring<T> {
+    //
+    // Create an histogram that ignores any input.
+    //
+    // `Ignoring` histograms are effectively implemented as empty
+    // structs, without a back-end, so they take no memory.
+    //
     pub fn new() -> Ignoring<T> {
         Ignoring {
             witness: PhantomData
@@ -154,11 +176,21 @@ impl Histogram<()> for Flag {
 
 
 impl Flag {
-    pub fn new(feature: &Service, name: String) -> Flag {
+    ///
+    /// Create a new Flag histogram with a given name.
+    ///
+    /// Argument `name` is used as key when processing and exporting
+    /// the data. Each `name` must be unique to the `Service`.
+    ///
+    /// # Panics
+    ///
+    /// If `name` is already used by another histogram in `service`.
+    ///
+    pub fn new(service: &Service, name: String) -> Flag {
         let storage = Box::new(FlagStorage { encountered: false });
-        let key = PrivateAccess::register_plain(feature, name, storage);
+        let key = PrivateAccess::register_plain(service, name, storage);
         Flag {
-            back_end: BackEnd::new(feature, key),
+            back_end: BackEnd::new(service, key),
             cache: AtomicBool::new(false),
         }
     }
@@ -200,16 +232,53 @@ impl<T> Histogram<T> for Linear<T> where T: Flatten {
 }
 
 impl<T> Linear<T> where T: Flatten {
-    pub fn new(feature: &Service, name: String, min: u32, max: u32, buckets: usize) -> Linear<T> {
+    ///
+    /// Create a new Linear histogram with a given name.
+    ///
+    /// Argument `name` is used as key when processing and exporting
+    /// the data. Each `name` must be unique to the `Service`.
+    ///
+    /// `min` is the minimal value expected to be entered in this
+    /// histogram. Any value lower than `min` is rounded up to `min`.
+    ///
+    /// `max` is the maximal value expected to be entered in this
+    /// histogram. Any value higher than `max` is rounded up to `max`.
+    ///
+    /// `buckets` is the number of buckets in this histogram. For
+    /// highest possible precision, use `buckets = max - min + 1`.
+    /// In most cases, however, such precision is not needed, so you
+    /// should use a lower number of buckets.
+    ///
+    ///
+    /// # Performance
+    ///
+    /// Increasing the number of buckets increases the memory usage on
+    /// the client by a few bytes per bucket. More importantly, it also
+    /// increases the size of the payload, hence the total amount of
+    /// data that the application will eventually upload to a central
+    /// server. If your application has many clients and you wish to
+    /// keep your server happy and your bandwidth costs manageable,
+    /// don't use too many buckets.
+    ///
+    ///
+    /// # Panics
+    ///
+    /// If `name` is already used by another histogram in `service`.
+    ///
+    /// If `min >= max`.
+    ///
+    /// If `buckets < max - min + 1`.
+    ///
+    pub fn new(service: &Service, name: String, min: u32, max: u32, buckets: usize) -> Linear<T> {
         assert!(size_of::<u32>() <= size_of::<usize>());
         assert!(min < max);
-        assert!(max - min >= buckets as u32);
+        assert!(max - min + 1 >= buckets as u32);
         let shape = LinearBuckets::new(min, max, buckets);
         let storage = Box::new(LinearStorage::new(shape));
-        let key = PrivateAccess::register_plain(feature, name, storage);
+        let key = PrivateAccess::register_plain(service, name, storage);
         Linear {
             witness: PhantomData,
-            back_end: BackEnd::new(feature, key),
+            back_end: BackEnd::new(service, key),
         }
     }
 }
@@ -294,11 +363,21 @@ impl Histogram<u32> for Count {
 
 
 impl Count {
-    pub fn new(feature: &Service, name: String) -> Count {
+    ///
+    /// Create a new Count histogram with a given name.
+    ///
+    /// Argument `name` is used as key when processing and exporting
+    /// the data. Each `name` must be unique to the `Service`.
+    ///
+    /// # Panics
+    ///
+    /// If `name` is already used by another histogram in `service`.
+    ///
+    pub fn new(service: &Service, name: String) -> Count {
         let storage = Box::new(CountStorage { value: 0 });
-        let key = PrivateAccess::register_plain(feature, name, storage);
+        let key = PrivateAccess::register_plain(service, name, storage);
         Count {
-            back_end: BackEnd::new(feature, key),
+            back_end: BackEnd::new(service, key),
         }
     }
 }
@@ -342,6 +421,16 @@ impl PlainRawStorage for EnumStorage {
 }
 
 impl<K> Histogram<K> for Enum<K> where K: Flatten {
+    ///
+    /// Record a value.
+    ///
+    /// Actual recording takes place on the background thread.
+    ///
+    /// # Panics
+    ///
+    /// If the result is larger than the value of `max` passed as
+    /// argument when constructing the histogram.
+    ///
     fn record_cb<F>(&self, cb: F) where F: FnOnce() -> Option<K>  {
         self.back_end.raw_record_cb(cb);
     }
@@ -349,12 +438,30 @@ impl<K> Histogram<K> for Enum<K> where K: Flatten {
 
 
 impl<K> Enum<K> where K: Flatten {
-    pub fn new(feature: &Service, name: String, buckets: usize) -> Enum<K> {
-        let storage = Box::new(EnumStorage { values: vec_with_size(buckets, 0) });
-        let key = PrivateAccess::register_plain(feature, name, storage);
+    ///
+    /// Create a new Enum histogram with a given name.
+    ///
+    /// Argument `name` is used as key when processing and exporting
+    /// the data. Each `name` must be unique to the `Service`.
+    ///
+    /// `max` is the highest possible
+    /// [flattened](../trait.Flatten.html) value expected to be passed
+    /// to `record()`.
+    ///
+    ///
+    /// # Panics
+    ///
+    /// If `name` is already used by another histogram in `service`.
+    ///
+    /// If `max == 0`.
+    ///
+    pub fn new(service: &Service, name: String, max: usize) -> Enum<K> {
+        assert!(max != 0);
+        let storage = Box::new(EnumStorage { values: vec_with_size(max, 0) });
+        let key = PrivateAccess::register_plain(service, name, storage);
         Enum {
             witness: PhantomData,
-            back_end: BackEnd::new(feature, key),
+            back_end: BackEnd::new(service, key),
         }
     }
 }
