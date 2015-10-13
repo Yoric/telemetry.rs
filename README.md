@@ -1,4 +1,11 @@
+Telemetry.rs
+========
+
+[![Build Status](https://api.travis-ci.org/Yoric/telemetry.rs.svg?branch=master)](https://api.travis-ci.org/Yoric/telemetry.rs)
+
 Telemetry is a mechanism used to capture metrics in an application, to later store the data locally or upload it to a server for statistical analysis.
+
+
 
 Examples of usage:
 - capturing the speed of an operation;
