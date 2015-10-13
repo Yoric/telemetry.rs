@@ -11,7 +11,7 @@ use telemetry::*;
 
 #[test]
 fn create_flags() {
-    let telemetry = Arc::new(Service::new());
+    let telemetry = Arc::new(Service::new(false));
     let flag_plain = plain::Flag::new(&telemetry, "Test linear plain".to_string());
     let flag_map = keyed::KeyedFlag::new(&telemetry, "Test flag map".to_string());
 
@@ -25,7 +25,7 @@ fn create_flags() {
 
 #[test]
 fn create_linears() {
-    let telemetry = Arc::new(Service::new());
+    let telemetry = Arc::new(Service::new(false));
     let linear_plain =
         plain::Linear::new(&telemetry,
                             "Test linear plain".to_string(),
@@ -46,7 +46,7 @@ fn create_linears() {
 #[test]
 #[should_panic]
 fn create_linears_bad_1() {
-    let telemetry = Arc::new(Service::new());
+    let telemetry = Arc::new(Service::new(false));
     let _ : plain::Linear<u32> =
         plain::Linear::new(&telemetry,
                             "Test linear plain".to_string(),
@@ -57,7 +57,7 @@ fn create_linears_bad_1() {
 #[test]
 #[should_panic]
 fn create_linears_bad_2() {
-    let telemetry = Arc::new(Service::new());
+    let telemetry = Arc::new(Service::new(false));
     let _ : plain::Linear<u32> =
         plain::Linear::new(&telemetry,
                             "Test linear plain".to_string(),
@@ -68,7 +68,7 @@ fn create_linears_bad_2() {
 #[test]
 #[should_panic]
 fn create_linears_bad_3() {
-    let telemetry = Arc::new(Service::new());
+    let telemetry = Arc::new(Service::new(false));
     let _ : plain::Linear<u32> =
         plain::Linear::new(&telemetry,
                             "Test linear plain".to_string(),
@@ -104,7 +104,7 @@ fn get_all_serialized(telemetry: &Service) -> (Json, Json){
 
 #[test]
 fn test_serialize_simple() {
-    let telemetry = Service::new();
+    let telemetry = Service::new(false);
 
     telemetry.set_active(true);
 

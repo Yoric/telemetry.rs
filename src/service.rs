@@ -25,7 +25,7 @@ use indexing::*;
 /// histograms with the same key.
 ///
 impl Service {
-    pub fn new() -> Service {
+    pub fn new(is_active: bool) -> Service {
         let (sender, receiver) = channel();
         thread::spawn(|| {
             let mut task = TelemetryTask::new(receiver);
@@ -35,7 +35,7 @@ impl Service {
             keys_plain: KeyGenerator::new(),
             keys_keyed: KeyGenerator::new(),
             sender: sender,
-            is_active: Arc::new(AtomicBool::new(false)),
+            is_active: Arc::new(AtomicBool::new(is_active)),
         }
     }
 

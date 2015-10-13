@@ -52,10 +52,7 @@ fn fibonacci(i: u32) -> u32 {
 }
 
 fn main() {
-    let telemetry = telemetry::Service::new();
-
-    // Don't forget to activate telemetry.
-    telemetry.set_active(true);
+    let telemetry = telemetry::Service::new(true /* activate immediately */);
 
     let histograms = Histograms {
         fibonacci_us: telemetry::plain::Linear::new(
@@ -101,5 +98,5 @@ fn main() {
     // Write to disk.
     let data = format!("{}\n", Json::Object(storage));
     let mut file = File::create("telemetry.json").unwrap();
-    file.write_all(&data.into_bytes());
+    file.write_all(&data.into_bytes()).unwrap();
 }
