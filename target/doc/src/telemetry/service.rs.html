@@ -203,7 +203,7 @@
 <span class='doccomment'>/// histograms with the same key.</span>
 <span class='doccomment'>///</span>
 <span class='kw'>impl</span> <span class='ident'>Service</span> {
-    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>new</span>() <span class='op'>-&gt;</span> <span class='ident'>Service</span> {
+    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>new</span>(<span class='ident'>is_active</span>: <span class='ident'>bool</span>) <span class='op'>-&gt;</span> <span class='ident'>Service</span> {
         <span class='kw'>let</span> (<span class='ident'>sender</span>, <span class='ident'>receiver</span>) <span class='op'>=</span> <span class='ident'>channel</span>();
         <span class='ident'>thread</span>::<span class='ident'>spawn</span>(<span class='op'>||</span> {
             <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>task</span> <span class='op'>=</span> <span class='ident'>TelemetryTask</span>::<span class='ident'>new</span>(<span class='ident'>receiver</span>);
@@ -213,7 +213,7 @@
             <span class='ident'>keys_plain</span>: <span class='ident'>KeyGenerator</span>::<span class='ident'>new</span>(),
             <span class='ident'>keys_keyed</span>: <span class='ident'>KeyGenerator</span>::<span class='ident'>new</span>(),
             <span class='ident'>sender</span>: <span class='ident'>sender</span>,
-            <span class='ident'>is_active</span>: <span class='ident'>Arc</span>::<span class='ident'>new</span>(<span class='ident'>AtomicBool</span>::<span class='ident'>new</span>(<span class='boolval'>false</span>)),
+            <span class='ident'>is_active</span>: <span class='ident'>Arc</span>::<span class='ident'>new</span>(<span class='ident'>AtomicBool</span>::<span class='ident'>new</span>(<span class='ident'>is_active</span>)),
         }
     }
 
