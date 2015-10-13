@@ -25,6 +25,15 @@ use indexing::*;
 /// histograms with the same key.
 ///
 impl Service {
+    ///
+    /// Create a new instance of the service.
+    ///
+    /// This immediately launches the thread owning the data.
+    ///
+    /// If `is_active` is `false`, the service will immediately accept
+    /// records. Otherwise, the service will only start recording once
+    /// `set_active(true)` has been called.
+    ///
     pub fn new(is_active: bool) -> Service {
         let (sender, receiver) = channel();
         thread::spawn(|| {
