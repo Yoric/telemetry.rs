@@ -23,4 +23,4 @@ then be exported, so that applications can save them to disk or upload
 them to a server. Several types of Histograms are provided, suited to
 distinct kinds of measures.
 
-API documentation may be found [here](http://yoric.github.io/telemetry.rs/target/doc/telemetry/).
+API documentation may be found [here](http://yoric.github.io/telemetry.rs/doc/latest/telemetry/).

@@ -4,10 +4,11 @@ version = "0.1.0"
 authors = ["David Rajchenbach-Teller <D.O.Teller@gmail.com>"]
 repository = "https://github.com/Yoric/telemetry.rs"
 description = "Telemetry is a mechanism used to capture metrics in an application, to later store the data locally or upload it to a server for statistical analysis."
-documentation = "http://yoric.github.io/telemetry.rs/0.1.0/telemetry/index.html"
+documentation = "http://yoric.github.io/telemetry.rs/doc/0.1.0/telemetry/index.html"
 readme="README.md"
 keywords=["telemetry", "histograms", "metrics"]
 license="MIT"
+exclude=["telemetry.json", ".*", "doc/*"]
 
 [dependencies]
 rustc-serialize = "0.3"
