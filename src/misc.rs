@@ -26,6 +26,9 @@ pub enum Subset {
 
     /// Serialize all keyed histograms.
     AllKeyed,
+
+    /// Serialize everything.
+    Everything,
 }
 
 ///

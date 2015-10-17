@@ -119,7 +119,23 @@ impl TelemetryTask {
                             for ref histogram in self.keyed.values() {
                                 object.insert(histogram.name.clone(), histogram.contents.to_json(&format));
                             }
-
+                        },
+                        Subset::Everything => {
+                            match &format {
+                                &SerializationFormat::SimpleJson => {
+                                    let mut everything = Vec::new();
+                                    for ref histogram in self.plain.values() {
+                                        everything.push((histogram.name.clone(), histogram.contents.to_json(&format)));
+                                    }
+                                    for ref histogram in self.keyed.values() {
+                                        everything.push((histogram.name.clone(), histogram.contents.to_json(&format)));
+                                    }
+                                    everything.sort_by(|a, b| a.0.cmp(&b.0));
+                                    for (name, json) in everything {
+                                        object.insert(name, json);
+                                    }
+                                }
+                            }
                         }
                     }
                     sender.send(Json::Object(object)).unwrap();
