@@ -8,6 +8,9 @@ r=${PIPESTATUS[0]}
 if [ $r -ne 0 ]; then exit $r; fi
 
 # Build the C API and try compiling a C program against it.
+cargo build --manifest-path capi/Cargo.toml
+r=${PIPESTATUS[0]}
+if [ $r -ne 0 ]; then exit $r; fi
 cargo test --manifest-path capi/Cargo.toml
 r=${PIPESTATUS[0]}
 if [ $r -ne 0 ]; then exit $r; fi
