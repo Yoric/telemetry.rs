@@ -5,6 +5,7 @@ extern crate telemetry;
 
 use std::ptr;
 use std::ffi::{CStr, CString};
+use std::mem;
 use std::str;
 use std::sync::mpsc::channel;
 use telemetry::{Subset, Service, SerializationFormat};
@@ -77,18 +78,18 @@ unsafe fn new_histogram<T: CHistogram>(telemetry: &Service, name: *const libc::c
         Err(_) => return ptr::null_mut(),
     };
 
-    Box::into_raw(Box::new(T::new(r_str, &telemetry)))
+    box_to_raw(Box::new(T::new(r_str, &telemetry)))
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn telemetry_init(is_active: libc::c_int) -> *mut telemetry_t {
     let is_active = if is_active != 0 { true } else { false };
-    Box::into_raw(Box::new(telemetry_t::new(is_active)))
+    box_to_raw(Box::new(telemetry_t::new(is_active)))
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn telemetry_free(telemetry: *mut telemetry_t) {
-    let telemetry = Box::from_raw(telemetry);
+    let telemetry = box_from_raw(telemetry);
     drop(telemetry);
 }
 
@@ -101,7 +102,7 @@ pub unsafe extern "C" fn telemetry_new_flag(telemetry: *mut telemetry_t,
 }
 
 unsafe fn free_flag(flag: *mut flag_t) {
-    let flag = Box::from_raw(flag);
+    let flag = box_from_raw(flag);
     drop(flag);
 }
 
@@ -119,7 +120,7 @@ pub unsafe extern "C" fn telemetry_new_count(telemetry: *mut telemetry_t,
 }
 
 unsafe fn free_count(count: *mut count_t) {
-    let flag = Box::from_raw(count);
+    let flag = box_from_raw(count);
     drop(flag);
 }
 
@@ -134,19 +135,37 @@ fn serialize(telemetry: &telemetry_t, subset: Subset) -> Option<String> {
     receiver.recv().ok().map(|s| format!("{}", s.pretty()))
 }
 
+pub struct serialized_string_t {
+    inner: CString,
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn telemetry_borrow_string(serialized: *mut serialized_string_t)
+                                                 -> *const libc::c_char {
+    (*serialized).inner.as_ptr()
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn telemetry_serialize_plain_json(telemetry: *mut telemetry_t)
-                                                        -> *mut libc::c_char {
+                                                        -> *mut serialized_string_t {
     serialize(&*telemetry, Subset::AllPlain)
         .and_then(|s| CString::new(s).ok())
-        .map(|s| s.into_raw())
+        .map(|s| box_to_raw(Box::new(serialized_string_t { inner: s })))
         .unwrap_or(ptr::null_mut())
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn telemetry_free_serialized_json(s: *mut libc::c_char) {
-    let s = CString::from_raw(s);
+pub unsafe extern "C" fn telemetry_free_serialized_string(s: *mut serialized_string_t) {
+    let s = box_from_raw(s);
     drop(s);
+}
+
+unsafe fn box_to_raw<T>(b: Box<T>) -> *mut T {
+    mem::transmute(b)
+}
+
+unsafe fn box_from_raw<T>(p: *mut T) -> Box<T> {
+    mem::transmute(p)
 }
 
 #[test]
@@ -165,11 +184,12 @@ fn it_works() {
         telemetry_record_count(count, 2);
         telemetry_record_count(count, 3);
 
-        let s = telemetry_serialize_plain_json(telemetry);
-        let repr = CStr::from_ptr(s as *const libc::c_char).to_string_lossy();
+        let serialized = telemetry_serialize_plain_json(telemetry);
+        let s = telemetry_borrow_string(serialized);
+        let repr = String::from_utf8_lossy(CStr::from_ptr(s as *const libc::c_char).to_bytes());
         assert_eq!(repr, "{\n  \"COUNT\": 5,\n  \"FLAG\": 1\n}");
 
-        telemetry_free_serialized_json(s);
+        telemetry_free_serialized_string(serialized);
         telemetry_free(telemetry);
     }
 }

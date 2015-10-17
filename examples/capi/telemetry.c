@@ -12,10 +12,11 @@ int main(int argc, char* argv[]) {
   telemetry_record_flag(flag);
   telemetry_record_count(count, 2);
 
-  char* serialized = telemetry_serialize_plain_json(telemetry);
-  assert(!strcmp(serialized, "{\n  \"COUNT\": 2,\n  \"FLAG\": 1\n}"));
-  printf("%s\n", serialized);
-  telemetry_free_serialized_json(serialized);
+  struct serialized_string_t* serialized = telemetry_serialize_plain_json(telemetry);
+  char* s = telemetry_borrow_string(serialized);
+  assert(!strcmp(s, "{\n  \"COUNT\": 2,\n  \"FLAG\": 1\n}"));
+  printf("%s\n", s);
+  telemetry_free_serialized_string(serialized);
 
   telemetry_free(telemetry);
   return 0;
