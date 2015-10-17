@@ -1,0 +1,15 @@
+[package]
+name = "telemetry_capi"
+version = "0.1.0"
+authors = ["Josh Matthews <josh@joshmatthews.net>"]
+
+[lib]
+name = "telemetry_capi"
+crate-type = ["staticlib"]
+
+[dependencies]
+atomic_cell = "0"
+libc = "0"
+
+[dependencies.telemetry]
+path = "../"
