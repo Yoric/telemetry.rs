@@ -162,16 +162,12 @@ impl KeyedRawStorage for KeyedFlagStorage {
     fn store(&mut self, k: String, _: u32) {
         self.encountered.insert(k);
     }
-    fn to_json(&self, format: &SerializationFormat) -> Json {
-        match format {
-            &SerializationFormat::SimpleJson => {
-                // Collect and sort the keys.
-                let mut keys : Vec<&String> = self.encountered.iter().collect();
-                keys.sort();
-                let array = keys.iter().map(|&x| Json::String(x.clone())).collect();
-                Json::Array(array)
-            }
-        }
+    fn to_simple_json(&self) -> Json {
+        // Collect and sort the keys.
+        let mut keys : Vec<&String> = self.encountered.iter().collect();
+        keys.sort();
+        let array = keys.iter().map(|&x| Json::String(x.clone())).collect();
+        Json::Array(array)
     }
 }
 
@@ -243,13 +239,13 @@ impl KeyedRawStorage for KeyedLinearStorage {
                 e.get_mut()[index] += 1;
             }
             Vacant(e) => {
-                let mut vec = vec_with_size(self.shape.buckets, 0);
+                let mut vec = vec_with_size(self.shape.get_bucket_count(), 0);
                 vec[index] += 1;
                 e.insert(vec);
             }
         }
     }
-    fn to_json(&self, _: &SerializationFormat) -> Json {
+    fn to_simple_json(&self) -> Json {
         // Sort keys, for easier testing/comparison.
         let mut values : Vec<_> = self.values.iter().collect();
         values.sort();
@@ -365,21 +361,17 @@ impl KeyedRawStorage for KeyedCountStorage {
             }
         }
     }
-    fn to_json(&self, format: &SerializationFormat) -> Json {
-        match format {
-            &SerializationFormat::SimpleJson => {
-                // Sort keys, for easier testing/comparison.
-                let mut values : Vec<_> = self.values.iter().collect();
-                values.sort();
-                // Turn everything into an object.
-                let mut tree = BTreeMap::new();
-                for value in values {
-                    let (name, val) = value;
-                    tree.insert(name.clone(), Json::I64(val.clone() as i64));
-                }
-                Json::Object(tree)
-            }
+    fn to_simple_json(&self) -> Json {
+        // Sort keys, for easier testing/comparison.
+        let mut values : Vec<_> = self.values.iter().collect();
+        values.sort();
+        // Turn everything into an object.
+        let mut tree = BTreeMap::new();
+        for value in values {
+            let (name, val) = value;
+            tree.insert(name.clone(), Json::I64(val.clone() as i64));
         }
+        Json::Object(tree)
     }
 }
 
@@ -459,22 +451,18 @@ impl KeyedRawStorage for KeyedEnumStorage {
             }
         }
     }
-    fn to_json(&self, format: &SerializationFormat) -> Json {
-        match format {
-            &SerializationFormat::SimpleJson => {
-                // Sort keys, for easier testing/comparison.
-                let mut values : Vec<_> = self.values.iter().collect();
-                values.sort();
-                // Turn everything into an object.
-                let mut tree = BTreeMap::new();
-                for value in values {
-                    let (name, array) = value;
-                    let vec  = array.iter().map(|&x| Json::I64(x.clone() as i64)).collect();
-                    tree.insert(name.clone(), Json::Array(vec));
-                }
-                Json::Object(tree)
-            }
+    fn to_simple_json(&self) -> Json {
+        // Sort keys, for easier testing/comparison.
+        let mut values : Vec<_> = self.values.iter().collect();
+        values.sort();
+        // Turn everything into an object.
+        let mut tree = BTreeMap::new();
+        for value in values {
+            let (name, array) = value;
+            let vec  = array.iter().map(|&x| Json::I64(x.clone() as i64)).collect();
+            tree.insert(name.clone(), Json::Array(vec));
         }
+        Json::Object(tree)
     }
 }
 

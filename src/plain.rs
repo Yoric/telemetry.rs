@@ -13,7 +13,7 @@ use std::marker::PhantomData;
 use std::mem::size_of;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use misc::{Flatten, LinearBuckets, SerializationFormat, vec_resize, vec_with_size};
+use misc::{Flatten, LinearBuckets, LinearStats, SerializationFormat, ToMozilla, to_mozilla_core, vec_resize, vec_with_size};
 use task::{BackEnd, Op, PlainRawStorage};
 use service::{Service, PrivateAccess};
 use indexing::*;
@@ -152,13 +152,6 @@ impl PlainRawStorage for FlagStorage {
     fn store(&mut self, _: u32) {
         self.encountered = true;
     }
-    fn to_json(&self, format: &SerializationFormat) -> Json {
-        match format {
-            &SerializationFormat::SimpleJson => {
-                Json::I64(if self.encountered { 1 } else { 0 })
-            }
-        }
-    }
 }
 
 impl Histogram<()> for Flag {
@@ -174,6 +167,32 @@ impl Histogram<()> for Flag {
     }
 }
 
+impl ToMozilla for FlagStorage {
+    fn get_min(&self) -> i64 {
+        0
+    }
+    fn get_max(&self) -> i64 {
+        1
+    }
+    fn get_bucket_count(&self) -> i64 {
+        1
+    }
+    fn with_counts<F>(&self, f: F) where F: FnOnce(&Vec<u32>) {
+        let mut vec = Vec::with_capacity(1);
+        vec.push(if self.encountered { 1 } else { 0 });
+        f(&vec);
+    }
+    ///
+    /// As per the original implementation, the type of flag histograms is 3.
+    ///
+    fn get_histogram_type(&self) -> i64 {
+        3
+    }
+
+    fn to_mozilla(&self) -> Json {
+        to_mozilla_core(self, None)
+    }
+}
 
 impl Flag {
     ///
@@ -286,15 +305,17 @@ impl<T> Linear<T> where T: Flatten {
 struct LinearStorage {
     values: Vec<u32>,// We cannot use an array here, as this would make the struct unsized.
     shape: LinearBuckets,
+    stats: LinearStats
 }
 
 
 impl LinearStorage {
     fn new(shape: LinearBuckets) -> LinearStorage {
-        let vec = vec_with_size(shape.buckets, 0);
+        let vec = vec_with_size(shape.get_bucket_count(), 0);
         LinearStorage {
             values: vec,
             shape: shape,
+            stats: LinearStats::new(),
         }
     }
 }
@@ -303,10 +324,32 @@ impl PlainRawStorage for LinearStorage {
     fn store(&mut self, value: u32) {
         let index = self.shape.get_bucket(value);
         self.values[index] += 1;
+        self.stats.record(value);
     }
-    fn to_json(&self, _: &SerializationFormat) -> Json {
-        let json = Json::Array(self.values.iter().map(|&x| Json::I64(x as i64)).collect());
-        json
+
+    fn to_simple_json(&self) -> Json {
+        Json::Array(self.values.iter().map(|&x| Json::I64(x as i64)).collect())
+    }
+}
+
+impl ToMozilla for LinearStorage {
+    fn get_histogram_type(&self) -> i64 {
+        1
+    }
+    fn with_counts<F>(&self, f: F) where F: FnOnce(&Vec<u32>) {
+        f(&self.values);
+    }
+    fn to_mozilla(&self) -> Json {
+        to_mozilla_core(self, Some(&self.stats))
+    }
+    fn get_min(&self) -> i64 {
+        self.shape.get_min() as i64
+    }
+    fn get_max(&self) -> i64 {
+        self.shape.get_max() as i64
+    }
+    fn get_bucket_count(&self) -> i64 {
+        self.shape.get_bucket_count() as i64
     }
 }
 
@@ -346,14 +389,34 @@ impl PlainRawStorage for CountStorage {
     fn store(&mut self, value: u32) {
         self.value += value;
     }
-    fn to_json(&self, format: &SerializationFormat) -> Json {
-        match format {
-            &SerializationFormat::SimpleJson => {
-                Json::I64(self.value as i64)
-            }
-        }
+    fn to_simple_json(&self) -> Json {
+        Json::I64(self.value as i64)
     }
 }
+
+impl ToMozilla for CountStorage {
+    fn get_min(&self) -> i64 {
+        0 // Following the original implementation.
+    }
+    fn get_max(&self) -> i64 {
+        2 // Following the original implementation.
+    }
+    fn get_bucket_count(&self) -> i64 {
+        1
+    }
+    fn to_mozilla(&self) -> Json {
+        to_mozilla_core(self, None)
+    }
+    fn with_counts<F>(&self, f: F) where F: FnOnce(&Vec<u32>) {
+        let mut vec = Vec::with_capacity(1);
+        vec.push(self.value);
+        f(&vec)
+    }
+    fn get_histogram_type(&self) -> i64 {
+        4
+    }
+}
+
 
 impl Histogram<u32> for Count {
     fn record_cb<F>(&self, cb: F) where F: FnOnce() -> Option<u32>  {
@@ -383,7 +446,6 @@ impl Count {
 }
 
 
-
 ///
 ///
 /// Enumerated histograms.
@@ -404,20 +466,41 @@ pub struct Enum<K> where K: Flatten {
 
 // The storage, owned by the Telemetry Task.
 struct EnumStorage {
-    values: Vec<u32>
+    values: Vec<u32>,
+    stats: LinearStats,
+    nbuckets: u32,
 }
 
 impl PlainRawStorage for EnumStorage {
     fn store(&mut self, value: u32) {
         vec_resize(&mut self.values, value as usize + 1, 0);
         self.values[value as usize] += 1;
+        self.stats.record(value);
     }
-    fn to_json(&self, format: &SerializationFormat) -> Json {
-        match format {
-            &SerializationFormat::SimpleJson => {
-                Json::Array(self.values.iter().map(|&x| Json::I64(x as i64)).collect())
-            }
-        }
+    fn to_simple_json(&self) -> Json {
+        Json::Array(self.values.iter().map(|&x| Json::I64(x as i64)).collect())
+    }
+}
+
+impl ToMozilla for EnumStorage {
+    fn get_min(&self) -> i64 {
+        0
+    }
+    fn get_max(&self) -> i64 {
+        self.nbuckets as i64
+    }
+    fn get_bucket_count(&self) -> i64 {
+        self.nbuckets as i64
+    }
+    fn with_counts<F>(&self, f:F) where F: FnOnce(&Vec<u32>) {
+        f(&self.values)
+    }
+    fn get_histogram_type(&self) -> i64 {
+        // Enum histograms are considered Linear histograms
+        1
+    }
+    fn to_mozilla(&self) -> Json {
+        to_mozilla_core(self, Some(&self.stats))
     }
 }
 
@@ -439,8 +522,12 @@ impl<K> Enum<K> where K: Flatten {
     ///
     /// If `name` is already used by another histogram in `service`.
     ///
-    pub fn new(service: &Service, name: String) -> Enum<K> {
-        let storage = Box::new(EnumStorage { values: Vec::new() });
+    pub fn new(service: &Service, name: String, nbuckets: u32) -> Enum<K> {
+        let storage = Box::new(EnumStorage {
+            values: Vec::new(),
+            stats: LinearStats::new(),
+            nbuckets: nbuckets,
+        });
         let key = PrivateAccess::register_plain(service, name, storage);
         Enum {
             witness: PhantomData,

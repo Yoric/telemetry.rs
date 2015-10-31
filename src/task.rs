@@ -12,6 +12,7 @@ use self::vec_map::VecMap;
 extern crate rustc_serialize;
 use self::rustc_serialize::json::Json;
 
+use std::cmp;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::collections::{BTreeMap, HashSet};
@@ -27,7 +28,17 @@ use service::{PrivateAccess, Service};
 ///
 pub trait PlainRawStorage: Send {
     fn store(&mut self, value: u32);
-    fn to_json(&self, &SerializationFormat) -> Json;
+    fn to_json(&self, format: &SerializationFormat) -> Json {
+        match format {
+            &SerializationFormat::SimpleJson => {
+                self.to_simple_json()
+            }
+            _ => unreachable!()
+        }
+    }
+    fn to_simple_json(&self) -> Json {
+        unreachable!()
+    }
 }
 
 ///
@@ -35,8 +46,19 @@ pub trait PlainRawStorage: Send {
 ///
 pub trait KeyedRawStorage: Send {
     fn store(&mut self, key: String, value: u32);
-    fn to_json(&self, format: &SerializationFormat) -> Json;
+     fn to_json(&self, format: &SerializationFormat) -> Json {
+        match format {
+            &SerializationFormat::SimpleJson => {
+                self.to_simple_json()
+            }
+            _ => unreachable!()
+        }
+    }
+    fn to_simple_json(&self) -> Json {
+        unreachable!()
+    }
 }
+
 
 
 /// Operations used to communicate with the TelemetryTask.
@@ -134,6 +156,18 @@ impl TelemetryTask {
                                     for (name, json) in everything {
                                         object.insert(name, json);
                                     }
+                                }
+                                &SerializationFormat::Mozilla => {
+                                    let mut plain = BTreeMap::new();
+                                    for ref histogram in self.plain.values() {
+                                        plain.insert(histogram.name.clone(), histogram.contents.to_json(&format));
+                                    }
+                                    let mut keyed = BTreeMap::new();
+                                    for ref histogram in self.keyed.values() {
+                                        keyed.insert(histogram.name.clone(), histogram.contents.to_json(&format));
+                                    }
+                                    object.insert("histograms".to_owned(), Json::Object(plain));
+                                    object.insert("keyedHistograms".to_owned(), Json::Object(keyed));
                                 }
                             }
                         }
