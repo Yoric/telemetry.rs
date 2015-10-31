@@ -9,11 +9,12 @@
 
 use rustc_serialize::json::Json;
 
+use std::borrow::Cow;
 use std::marker::PhantomData;
 use std::mem::size_of;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use misc::{Flatten, LinearBuckets, LinearStats, SerializationFormat, ToMozilla, to_mozilla_core, vec_resize, vec_with_size};
+use misc::{Flatten, LinearBuckets, LinearStats, MozillaIntermediateFormat, vec_resize, vec_with_size};
 use task::{BackEnd, Op, PlainRawStorage};
 use service::{Service, PrivateAccess};
 use indexing::*;
@@ -152,6 +153,23 @@ impl PlainRawStorage for FlagStorage {
     fn store(&mut self, _: u32) {
         self.encountered = true;
     }
+
+    fn to_simple_json(&self) -> Json {
+        Json::I64(if self.encountered { 1 } else { 0 })
+    }
+
+    fn to_moz_intermediate_format<'a>(&'a self) -> MozillaIntermediateFormat<'a> {
+        let mut vec = Vec::with_capacity(1);
+        vec.push(if self.encountered { 1 } else { 0 });
+        MozillaIntermediateFormat {
+            min: 0,
+            max: 1,
+            bucket_count: 1,
+            counts: Cow::Owned(vec),
+            histogram_type: 3,
+            linear: None,
+        }
+    }
 }
 
 impl Histogram<()> for Flag {
@@ -164,33 +182,6 @@ impl Histogram<()> for Flag {
         if self.back_end.raw_record_cb(cb) {
             self.cache.store(true, Ordering::Relaxed);
         }
-    }
-}
-
-impl ToMozilla for FlagStorage {
-    fn get_min(&self) -> i64 {
-        0
-    }
-    fn get_max(&self) -> i64 {
-        1
-    }
-    fn get_bucket_count(&self) -> i64 {
-        1
-    }
-    fn with_counts<F>(&self, f: F) where F: FnOnce(&Vec<u32>) {
-        let mut vec = Vec::with_capacity(1);
-        vec.push(if self.encountered { 1 } else { 0 });
-        f(&vec);
-    }
-    ///
-    /// As per the original implementation, the type of flag histograms is 3.
-    ///
-    fn get_histogram_type(&self) -> i64 {
-        3
-    }
-
-    fn to_mozilla(&self) -> Json {
-        to_mozilla_core(self, None)
     }
 }
 
@@ -330,26 +321,16 @@ impl PlainRawStorage for LinearStorage {
     fn to_simple_json(&self) -> Json {
         Json::Array(self.values.iter().map(|&x| Json::I64(x as i64)).collect())
     }
-}
 
-impl ToMozilla for LinearStorage {
-    fn get_histogram_type(&self) -> i64 {
-        1
-    }
-    fn with_counts<F>(&self, f: F) where F: FnOnce(&Vec<u32>) {
-        f(&self.values);
-    }
-    fn to_mozilla(&self) -> Json {
-        to_mozilla_core(self, Some(&self.stats))
-    }
-    fn get_min(&self) -> i64 {
-        self.shape.get_min() as i64
-    }
-    fn get_max(&self) -> i64 {
-        self.shape.get_max() as i64
-    }
-    fn get_bucket_count(&self) -> i64 {
-        self.shape.get_bucket_count() as i64
+    fn to_moz_intermediate_format<'a>(&'a self) -> MozillaIntermediateFormat<'a> {
+        MozillaIntermediateFormat {
+            histogram_type: 1,
+            min: self.shape.get_min() as i64,
+            max: self.shape.get_max() as i64,
+            bucket_count: self.shape.get_bucket_count() as i64,
+            linear: Some(&self.stats),
+            counts: Cow::Borrowed(&self.values)
+        }
     }
 }
 
@@ -392,29 +373,19 @@ impl PlainRawStorage for CountStorage {
     fn to_simple_json(&self) -> Json {
         Json::I64(self.value as i64)
     }
-}
-
-impl ToMozilla for CountStorage {
-    fn get_min(&self) -> i64 {
-        0 // Following the original implementation.
-    }
-    fn get_max(&self) -> i64 {
-        2 // Following the original implementation.
-    }
-    fn get_bucket_count(&self) -> i64 {
-        1
-    }
-    fn to_mozilla(&self) -> Json {
-        to_mozilla_core(self, None)
-    }
-    fn with_counts<F>(&self, f: F) where F: FnOnce(&Vec<u32>) {
+    fn to_moz_intermediate_format<'a>(&'a self) -> MozillaIntermediateFormat<'a> {
         let mut vec = Vec::with_capacity(1);
         vec.push(self.value);
-        f(&vec)
+        MozillaIntermediateFormat {
+            min: 0, // Following the original implementation.
+            max: 2, // Following the original implementation.
+            bucket_count: 1,
+            counts: Cow::Owned(vec),
+            histogram_type: 4,
+            linear: None,
+        }
     }
-    fn get_histogram_type(&self) -> i64 {
-        4
-    }
+
 }
 
 
@@ -480,27 +451,15 @@ impl PlainRawStorage for EnumStorage {
     fn to_simple_json(&self) -> Json {
         Json::Array(self.values.iter().map(|&x| Json::I64(x as i64)).collect())
     }
-}
-
-impl ToMozilla for EnumStorage {
-    fn get_min(&self) -> i64 {
-        0
-    }
-    fn get_max(&self) -> i64 {
-        self.nbuckets as i64
-    }
-    fn get_bucket_count(&self) -> i64 {
-        self.nbuckets as i64
-    }
-    fn with_counts<F>(&self, f:F) where F: FnOnce(&Vec<u32>) {
-        f(&self.values)
-    }
-    fn get_histogram_type(&self) -> i64 {
-        // Enum histograms are considered Linear histograms
-        1
-    }
-    fn to_mozilla(&self) -> Json {
-        to_mozilla_core(self, Some(&self.stats))
+    fn to_moz_intermediate_format<'a>(&'a self) -> MozillaIntermediateFormat<'a> {
+        MozillaIntermediateFormat {
+            min: 0,
+            max: self.nbuckets as i64,
+            bucket_count: self.nbuckets as i64,
+            counts: Cow::Borrowed(&self.values),
+            histogram_type: 1, // Enum histograms are considered Linear histograms
+            linear: Some(&self.stats),
+        }
     }
 }
 

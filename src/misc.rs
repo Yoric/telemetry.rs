@@ -4,6 +4,7 @@
 
 use rustc_serialize::json::Json;
 
+use std::borrow::Cow;
 use std::ptr;
 use std::collections::BTreeMap;
 
@@ -204,60 +205,69 @@ pub fn vec_with_size<T>(size: usize, value: T) -> Vec<T>
     vec
 }
 
-///
-/// Insert the core data.
-///
-/// This does not include `sum`, `sum_squares_*`, `log_sum_*`.
-///
-pub fn to_mozilla_core<T>(histogram: &T,
-                          linear: Option<&LinearStats>) -> Json
-    where T: ToMozilla {
-    // Port of Mozilla's histogram packing algorithm, as seen
-    // here:
-    // https://dxr.mozilla.org/mozilla-central/rev/01e37977f8da2e1f8b9ce9b777e556ffb1437960/toolkit/components/telemetry/TelemetrySession.jsm#903
-    let mut tree = BTreeMap::new();
-    tree.insert("range".to_owned(),
-                Json::Array(vec![Json::I64(histogram.get_min()),
-                                 Json::I64(histogram.get_max())]));
-    tree.insert("bucket_count".to_owned(), Json::I64(histogram.get_bucket_count()));
-    tree.insert("histogram_type".to_owned(), Json::I64(histogram.get_histogram_type()));
 
-    histogram.with_counts(|ref counts| {
+pub struct MozillaIntermediateFormat<'a> {
+    pub min: i64,
+    pub max: i64,
+    pub bucket_count: i64,
+    pub histogram_type: i64,
+    pub linear: Option<&'a LinearStats>,
+    pub counts: Cow<'a, Vec<u32>>,
+}
+
+impl<'a> MozillaIntermediateFormat<'a> {
+    /// Port of Mozilla's histogram packing algorithm, as seen
+    /// here:
+    /// https://dxr.mozilla.org/mozilla-central/rev/01e37977f8da2e1f8b9ce9b777e556ffb1437960/toolkit/components/telemetry/TelemetrySession.jsm#903
+    pub fn to_json(&self) -> Json {
+        let mut tree = BTreeMap::new();
+        tree.insert("range".to_owned(),
+                    Json::Array(vec![Json::I64(self.min),
+                                     Json::I64(self.max)]));
+        tree.insert("bucket_count".to_owned(), Json::I64(self.bucket_count));
+        tree.insert("histogram_type".to_owned(), Json::I64(self.histogram_type));
+
         let mut values_tree = BTreeMap::new();
 
         // Index of the first non-0 value.
-        let first = counts.iter().cloned().position(|x| x != 0);
+        let first = self.counts.iter().cloned().position(|x| x != 0);
         // Index of the last non-0 value.
-        let last = counts.iter().cloned().rposition(|x| x != 0);
+        let last = self.counts.iter().cloned().rposition(|x| x != 0);
         match (first, last) {
             (None, None) => {} //Nothing to copy
             (Some(f), Some (l)) => {
                 // Copy non-0 values, padding with 0 on both ends if this fits
                 // within the bounds.
                 let start = if f > 0 { f - 1 } else { f };
-                let stop = if l < counts.len() - 1 { l + 1 } else { l };
+                let stop = if l < self.counts.len() - 1 { l + 1 } else { l };
                 for i in start .. stop {
-                    values_tree.insert(format!("{}", i), Json::I64(counts[i] as i64));
+                    values_tree.insert(format!("{}", i), Json::I64(self.counts[i] as i64));
                 }
             }
             _ => unreachable!()
         }
 
         tree.insert("values".to_owned(), Json::Object(values_tree));
-    });
 
-    if let Some(ref unpacked) = linear {
-        let sum = unpacked.sum;
-        tree.insert("sum".to_owned(), Json::I64(sum as i64));
+        if let Some(ref unpacked) = self.linear {
+            let sum = unpacked.sum;
+            tree.insert("sum".to_owned(), Json::I64(sum as i64));
 
-        let sum_squares = unpacked.sum_squares;
-        // Emulate a u64 with two JS numbers.
-        tree.insert("sum_squares_lo".to_owned(), Json::I64((sum_squares as u32) as i64));
-        tree.insert("sum_squares_hi".to_owned(), Json::I64((sum_squares >> 32) as i64));
+            let sum_squares = unpacked.sum_squares;
+            // Emulate a u64 with two JS numbers.
+            tree.insert("sum_squares_lo".to_owned(), Json::I64((sum_squares as u32) as i64));
+            tree.insert("sum_squares_hi".to_owned(), Json::I64((sum_squares >> 32) as i64));
+        }
+
+        Json::Object(tree)
     }
-
-    Json::Object(tree)
 }
+
+///
+/// Insert the core data.
+///
+/// This does not include `sum`, `sum_squares_*`, `log_sum_*`.
+///
 
 
 pub trait ToMozilla {
@@ -271,42 +281,3 @@ pub trait ToMozilla {
     fn to_mozilla(&self) -> Json;
 }
 
-/*
-pub struct Statistics {
-    pub ranges: Vec<u32>, // FIXME: Implement
-    pub sum: i64, // FIXME: Implement
-    pub sum_squares: i64,
-    pub counts: Vec<u32>,
-}
-
-impl Statistics {
-    pub fn new(buckets: usize) -> Self {
-        Statistics {
-            ranges: ranges,
-            sum: 0,
-            sum_squares: 0,
-            counts: vec_with_size(buckets),
-        }
-    }
-    pub fn record(&mut self, value: u32, bucket: usize) {
-        self.sum += value;
-        self.sum_squares += value * value; // FIXME: Not necessary for exponential.
-        self.counts[bucket] += 1;
-    }
-    pub fn get_counts(&self) -> Vec<u32> {
-        self.counts
-    }
-    pub fn get_histogram_type(&self) -> i64 { // FIXME: Enum?
-        unreachable!();
-    }
-    pub fn get_sum_squares(&self) -> Option<u64> {
-        unreachable!();
-    }
-    pub fn get_log_sums(&self) -> Option<(f64, f64)> {
-        unreachable!();
-    }
-    pub fn get_log_sum_squares(&self) -> u32 {
-        unreachable!();
-    }
-}
-*/

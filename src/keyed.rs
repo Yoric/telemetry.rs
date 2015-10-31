@@ -14,7 +14,7 @@ use std::collections::hash_map::Entry::{Occupied, Vacant};
 use std::marker::PhantomData;
 use std::mem::size_of;
 
-use misc::{Flatten, LinearBuckets, SerializationFormat, vec_resize, vec_with_size};
+use misc::{Flatten, LinearBuckets, vec_resize, vec_with_size};
 use task::{BackEnd, Op, KeyedRawStorage};
 use service::{Service, PrivateAccess};
 use indexing::*;

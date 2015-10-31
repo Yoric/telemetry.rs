@@ -36,9 +36,18 @@ pub trait PlainRawStorage: Send {
             _ => unreachable!()
         }
     }
-    fn to_simple_json(&self) -> Json {
-        unreachable!()
-    }
+
+    ///
+    /// Serialize the histogram into a simple, mostly human-readable format.
+    ///
+    fn to_simple_json(&self) -> Json;
+
+    ///
+    /// Serialize the histogram into an intermediate format that can
+    /// generate the format understood by the Mozilla Telemetry
+    /// Server.
+    ///
+    fn to_moz_intermediate_format<'a>(&'a self) -> MozillaIntermediateFormat<'a>;
 }
 
 ///
@@ -54,9 +63,11 @@ pub trait KeyedRawStorage: Send {
             _ => unreachable!()
         }
     }
-    fn to_simple_json(&self) -> Json {
-        unreachable!()
-    }
+
+    ///
+    /// Serialize the histogram into a simple, mostly human-readable format.
+    ///
+    fn to_simple_json(&self) -> Json;
 }
 
 
@@ -160,11 +171,12 @@ impl TelemetryTask {
                                 &SerializationFormat::Mozilla => {
                                     let mut plain = BTreeMap::new();
                                     for ref histogram in self.plain.values() {
-                                        plain.insert(histogram.name.clone(), histogram.contents.to_json(&format));
+                                        let intermediate = histogram.contents.to_moz_intermediate_format();
+                                        plain.insert(histogram.name.clone(), intermediate.to_json());
                                     }
                                     let mut keyed = BTreeMap::new();
                                     for ref histogram in self.keyed.values() {
-                                        keyed.insert(histogram.name.clone(), histogram.contents.to_json(&format));
+                                        keyed.insert(histogram.name.clone(), histogram.contents.to_json(&format)); // FIXME
                                     }
                                     object.insert("histograms".to_owned(), Json::Object(plain));
                                     object.insert("keyedHistograms".to_owned(), Json::Object(keyed));
