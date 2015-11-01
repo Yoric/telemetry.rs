@@ -14,7 +14,7 @@ use std::marker::PhantomData;
 use std::mem::size_of;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use misc::{Flatten, LinearBuckets, LinearStats, MozillaIntermediateFormat, vec_resize, vec_with_size};
+use misc::{Flatten, HistogramType, LinearBuckets, LinearStats, MozillaIntermediateFormat, vec_resize, vec_with_size};
 use task::{BackEnd, Op, PlainRawStorage};
 use service::{Service, PrivateAccess};
 use indexing::*;
@@ -166,7 +166,7 @@ impl PlainRawStorage for FlagStorage {
             max: 1,
             bucket_count: 1,
             counts: Cow::Owned(vec),
-            histogram_type: 3,
+            histogram_type: HistogramType::Flag,
             linear: None,
         }
     }
@@ -324,7 +324,7 @@ impl PlainRawStorage for LinearStorage {
 
     fn to_moz_intermediate_format<'a>(&'a self) -> MozillaIntermediateFormat<'a> {
         MozillaIntermediateFormat {
-            histogram_type: 1,
+            histogram_type: HistogramType::Linear,
             min: self.shape.get_min() as i64,
             max: self.shape.get_max() as i64,
             bucket_count: self.shape.get_bucket_count() as i64,
@@ -381,7 +381,7 @@ impl PlainRawStorage for CountStorage {
             max: 2, // Following the original implementation.
             bucket_count: 1,
             counts: Cow::Owned(vec),
-            histogram_type: 4,
+            histogram_type: HistogramType::Count,
             linear: None,
         }
     }
@@ -457,7 +457,7 @@ impl PlainRawStorage for EnumStorage {
             max: self.nbuckets as i64,
             bucket_count: self.nbuckets as i64,
             counts: Cow::Borrowed(&self.values),
-            histogram_type: 1, // Enum histograms are considered Linear histograms
+            histogram_type: HistogramType::Linear,
             linear: Some(&self.stats),
         }
     }

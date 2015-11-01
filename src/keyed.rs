@@ -9,12 +9,13 @@
 
 use rustc_serialize::json::Json;
 
+use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::collections::hash_map::Entry::{Occupied, Vacant};
 use std::marker::PhantomData;
 use std::mem::size_of;
 
-use misc::{Flatten, LinearBuckets, vec_resize, vec_with_size};
+use misc::{Flatten, HistogramType, LinearBuckets, LinearStats, MozillaIntermediateFormat, vec_resize, vec_with_size};
 use task::{BackEnd, Op, KeyedRawStorage};
 use service::{Service, PrivateAccess};
 use indexing::*;
@@ -169,6 +170,21 @@ impl KeyedRawStorage for KeyedFlagStorage {
         let array = keys.iter().map(|&x| Json::String(x.clone())).collect();
         Json::Array(array)
     }
+    fn to_moz_intermediate_format<'a>(&'a self) ->
+        Box<Iterator<Item = (&'a String, MozillaIntermediateFormat<'a>)> + 'a> {
+        Box::new(self.encountered.iter().map(|key| {
+            let mut vec = Vec::with_capacity(1);
+            vec.push(1);
+            (key, MozillaIntermediateFormat {
+                min: 0,
+                max: 1,
+                bucket_count: 1,
+                counts: Cow::Owned(vec),
+                histogram_type: HistogramType::Flag,
+                linear: None,
+            })
+        }))
+    }
 }
 
 impl<K> KeyedHistogram<K, ()> for KeyedFlag<K> where K: ToString {
@@ -217,8 +233,12 @@ pub struct KeyedLinear<K, T> where T: Flatten {
 
 type KeyedLinearBuckets = LinearBuckets;
 
+struct KeyedLinearItem {
+    counts: Vec<u32>,
+    stats: LinearStats,
+}
 struct KeyedLinearStorage {
-    values: HashMap<String, Vec<u32>>,
+    values: HashMap<String, KeyedLinearItem>,
     shape: KeyedLinearBuckets,
 }
 
@@ -226,7 +246,7 @@ impl KeyedLinearStorage {
     fn new(shape: KeyedLinearBuckets) -> KeyedLinearStorage {
         KeyedLinearStorage {
             values: HashMap::new(),
-            shape: shape
+            shape: shape,
         }
     }
 }
@@ -236,28 +256,51 @@ impl KeyedRawStorage for KeyedLinearStorage {
         let index = self.shape.get_bucket(value);
         match self.values.entry(key) {
             Occupied(mut e) => {
-                e.get_mut()[index] += 1;
+                let ref mut item = e.get_mut();
+                item.stats.record(value);
+                vec_resize(&mut item.counts, index + 1, 0);
+                item.counts[index] += 1;
             }
             Vacant(e) => {
-                let mut vec = vec_with_size(self.shape.get_bucket_count(), 0);
-                vec[index] += 1;
-                e.insert(vec);
+                let mut item = KeyedLinearItem {
+                    stats: LinearStats::new(),
+                    counts: vec_with_size(self.shape.get_bucket_count(), 0),
+                };
+                item.stats.record(value);
+                item.counts[index] += 1;
+                e.insert(item);
             }
         }
     }
     fn to_simple_json(&self) -> Json {
         // Sort keys, for easier testing/comparison.
         let mut values : Vec<_> = self.values.iter().collect();
-        values.sort();
+        values.sort_by(|&a, &b| a.0.cmp(b.0) );
         // Turn everything into an object.
         let mut tree = BTreeMap::new();
         for value in values {
-            let (name, vec) = value;
-            let array = Json::Array(vec.iter().map(|&x| Json::I64(x as i64)).collect());
+            let (name, item) = value;
+            let array = Json::Array(item.counts.iter().map(|&x| Json::I64(x as i64)).collect());
             tree.insert(name.clone(), array);
         }
         Json::Object(tree)
     }
+    fn to_moz_intermediate_format<'a>(&'a self) ->
+        Box<Iterator<Item = (&'a String, MozillaIntermediateFormat<'a>)> + 'a> {
+            let min = self.shape.get_min() as i64;
+            let max = self.shape.get_max() as i64;
+            let bucket_counts = self.shape.get_bucket_count() as i64;
+            Box::new(self.values.iter().map(move |(&ref key, &ref item)| {
+                (key, MozillaIntermediateFormat {
+                    min: min,
+                    max: max,
+                    bucket_count: bucket_counts,
+                    counts: Cow::Borrowed(&item.counts),
+                    linear: Some(&item.stats),
+                    histogram_type: HistogramType::Linear,
+                })
+            }))
+        }
 }
 
 
@@ -373,6 +416,20 @@ impl KeyedRawStorage for KeyedCountStorage {
         }
         Json::Object(tree)
     }
+    fn to_moz_intermediate_format<'a>(&'a self) -> Box<Iterator<Item = (&'a String, MozillaIntermediateFormat<'a>)> + 'a> {
+        Box::new(self.values.iter().map(move |(&ref key, &ref value)| {
+            let mut vec = Vec::with_capacity(1);
+            vec.push(*value);
+            (key, MozillaIntermediateFormat {
+                min: 0, // Following the original implementation.
+                max: 2, // Following the original implementation.
+                bucket_count: 1,
+                counts: Cow::Owned(vec),
+                linear: None,
+                histogram_type: HistogramType::Linear,
+            })
+        }))
+    }
 }
 
 impl<K> KeyedHistogram<K, u32> for KeyedCount<K> where K: ToString {
@@ -432,38 +489,55 @@ pub struct KeyedEnum<K, T> where K: ToString, T: Flatten {
 
 // The storage, owned by the Telemetry Task.
 struct KeyedEnumStorage {
-    values: HashMap<String, Vec<u32>>,
+    values: HashMap<String, KeyedLinearItem>,
 }
 
 impl KeyedRawStorage for KeyedEnumStorage {
     fn store(&mut self, key: String, value: u32) {
         match self.values.entry(key) {
             Occupied(mut e) => {
-                let mut vec = e.get_mut();
-                vec_resize(&mut vec, value as usize + 1, 0);
-                vec[value as usize] += 1;
+                let ref mut item = e.get_mut();
+                item.stats.record(value);
+                vec_resize(&mut item.counts, value as usize + 1, 0);
+                item.counts[value as usize] += 1;
             }
             Vacant(e) => {
-                let mut vec = Vec::new();
-                vec_resize(&mut vec, value as usize + 1, 0);
-                vec[value as usize] = 1;
-                e.insert(vec);
+                let mut item = KeyedLinearItem {
+                    stats: LinearStats::new(),
+                    counts: vec_with_size(value as usize + 1, 0),
+                };
+                item.stats.record(value);
+                item.counts[value as usize] += 1;
+                e.insert(item);
             }
         }
     }
     fn to_simple_json(&self) -> Json {
         // Sort keys, for easier testing/comparison.
         let mut values : Vec<_> = self.values.iter().collect();
-        values.sort();
+        values.sort_by(|&a, &b| a.0.cmp(b.0) );
         // Turn everything into an object.
         let mut tree = BTreeMap::new();
         for value in values {
-            let (name, array) = value;
-            let vec  = array.iter().map(|&x| Json::I64(x.clone() as i64)).collect();
+            let (name, item) = value;
+            let vec  = item.counts.iter().map(|&x| Json::I64(x.clone() as i64)).collect();
             tree.insert(name.clone(), Json::Array(vec));
         }
         Json::Object(tree)
     }
+    fn to_moz_intermediate_format<'a>(&'a self) -> Box<Iterator<Item = (&'a String, MozillaIntermediateFormat<'a>)> + 'a> {
+        Box::new(self.values.iter().map(move |(&ref key, &ref item)| {
+            (key, MozillaIntermediateFormat {
+                min: 0, // Following the original implementation.
+                max: 2, // Following the original implementation.
+                bucket_count: 1,
+                counts: Cow::Borrowed(&item.counts),
+                linear: Some(&item.stats),
+                histogram_type: HistogramType::Linear,
+            })
+        }))
+    }
+
 }
 
 impl<K, T> KeyedHistogram<K, T> for KeyedEnum<K, T> where K: ToString, T: Flatten {

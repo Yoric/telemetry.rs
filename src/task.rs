@@ -12,7 +12,6 @@ use self::vec_map::VecMap;
 extern crate rustc_serialize;
 use self::rustc_serialize::json::Json;
 
-use std::cmp;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::collections::{BTreeMap, HashSet};
@@ -68,6 +67,15 @@ pub trait KeyedRawStorage: Send {
     /// Serialize the histogram into a simple, mostly human-readable format.
     ///
     fn to_simple_json(&self) -> Json;
+
+    ///
+    /// Serialize the histogram into an intermediate format that can
+    /// generate the format understood by the Mozilla Telemetry
+    /// Server.
+    ///
+    fn to_moz_intermediate_format<'a>(&'a self) -> Box<Iterator<Item = (&'a String, MozillaIntermediateFormat<'a>)> + 'a> {
+        unreachable!()
+    }
 }
 
 

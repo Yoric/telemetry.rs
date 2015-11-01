@@ -210,7 +210,7 @@ pub struct MozillaIntermediateFormat<'a> {
     pub min: i64,
     pub max: i64,
     pub bucket_count: i64,
-    pub histogram_type: i64,
+    pub histogram_type: HistogramType,
     pub linear: Option<&'a LinearStats>,
     pub counts: Cow<'a, Vec<u32>>,
 }
@@ -225,7 +225,14 @@ impl<'a> MozillaIntermediateFormat<'a> {
                     Json::Array(vec![Json::I64(self.min),
                                      Json::I64(self.max)]));
         tree.insert("bucket_count".to_owned(), Json::I64(self.bucket_count));
-        tree.insert("histogram_type".to_owned(), Json::I64(self.histogram_type));
+        let histogram_type = match self.histogram_type {
+            HistogramType::Linear => 1,
+            HistogramType::Boolean => 2,
+            HistogramType::Flag => 3,
+            HistogramType::Count => 4,
+            HistogramType::Custom => 5,
+        };
+        tree.insert("histogram_type".to_owned(), Json::I64(histogram_type));
 
         let mut values_tree = BTreeMap::new();
 
@@ -263,21 +270,11 @@ impl<'a> MozillaIntermediateFormat<'a> {
     }
 }
 
-///
-/// Insert the core data.
-///
-/// This does not include `sum`, `sum_squares_*`, `log_sum_*`.
-///
-
-
-pub trait ToMozilla {
-    fn get_min(&self) -> i64;
-    fn get_max(&self) -> i64;
-    fn get_bucket_count(&self) -> i64;
-    fn with_counts<F>(&self, F) where F: FnOnce(&Vec<u32>);
-    fn get_histogram_type(&self) -> i64;
-
-
-    fn to_mozilla(&self) -> Json;
+pub enum HistogramType {
+    Linear,
+    Boolean,
+    Flag,
+    Count,
+    Custom
 }
 
