@@ -238,7 +238,7 @@ fn test_serialize_simple() {
 
 
     ////////// Test Enum
-    let enum_1 = plain::Enum::new(&telemetry, "Enum 1".to_string());
+    let enum_1 = plain::Enum::new(&telemetry, "Enum 1".to_string(), 10);
     enum_1.record(TestEnum::Case2);
     enum_1.record(TestEnum::Case2);
     enum_1.record(TestEnum::Case3("foobar".to_string()));
