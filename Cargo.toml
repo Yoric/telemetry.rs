@@ -7,7 +7,7 @@ description = "Telemetry is a mechanism used to capture metrics in an applicatio
 documentation = "http://yoric.github.io/telemetry.rs/doc/0.1.0/telemetry/index.html"
 readme="README.md"
 keywords=["telemetry", "histograms", "metrics"]
-license="MIT"
+license="MIT OR Apache-2.0"
 exclude=["telemetry.json", ".*", "doc/*"]
 
 [dependencies]
