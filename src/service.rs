@@ -1,14 +1,14 @@
 extern crate rustc_serialize;
 use self::rustc_serialize::json::Json;
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::thread;
 use std::sync::mpsc::{channel, Sender};
+use std::sync::Arc;
+use std::thread;
 
-use misc::{NamedStorage, SerializationFormat, Subset};
-use task::{Op, PlainRawStorage, KeyedRawStorage, TelemetryTask};
 use indexing::*;
+use misc::{NamedStorage, SerializationFormat, Subset};
+use task::{KeyedRawStorage, Op, PlainRawStorage, TelemetryTask};
 
 ///
 /// The Telemetry service.
@@ -57,7 +57,9 @@ impl Service {
     /// is complete.
     ///
     pub fn to_json(&self, what: Subset, format: SerializationFormat, sender: Sender<Json>) {
-        self.sender.send(Op::Serialize(what, format, sender)).unwrap();
+        self.sender
+            .send(Op::Serialize(what, format, sender))
+            .unwrap();
     }
 
     ///
@@ -78,8 +80,13 @@ impl Service {
     ///
     fn register_plain(&self, name: String, storage: Box<PlainRawStorage>) -> Key<Plain> {
         let key = self.keys_plain.next();
-        let named = NamedStorage { name: name, contents: storage };
-        self.sender.send(Op::RegisterPlain(key.index, named)).unwrap();
+        let named = NamedStorage {
+            name: name,
+            contents: storage,
+        };
+        self.sender
+            .send(Op::RegisterPlain(key.index, named))
+            .unwrap();
         key
     }
 
@@ -88,8 +95,13 @@ impl Service {
     ///
     fn register_keyed<T>(&self, name: String, storage: Box<KeyedRawStorage>) -> Key<Keyed<T>> {
         let key = self.keys_keyed.next();
-        let named = NamedStorage { name: name, contents: storage };
-        self.sender.send(Op::RegisterKeyed(key.index, named)).unwrap();
+        let named = NamedStorage {
+            name: name,
+            contents: storage,
+        };
+        self.sender
+            .send(Op::RegisterKeyed(key.index, named))
+            .unwrap();
         key
     }
 }
@@ -120,14 +132,21 @@ pub struct Service {
     sender: Sender<Op>,
 }
 
-
 // Backstage pass used inside the crate.
 impl PrivateAccess {
-    pub fn register_plain(service: &Service, name: String, storage: Box<PlainRawStorage>) -> Key<Plain> {
+    pub fn register_plain(
+        service: &Service,
+        name: String,
+        storage: Box<PlainRawStorage>,
+    ) -> Key<Plain> {
         service.register_plain(name, storage)
     }
 
-    pub fn register_keyed<T>(service: &Service, name: String, storage: Box<KeyedRawStorage>) -> Key<Keyed<T>> {
+    pub fn register_keyed<T>(
+        service: &Service,
+        name: String,
+        storage: Box<KeyedRawStorage>,
+    ) -> Key<Keyed<T>> {
         service.register_keyed(name, storage)
     }
 
@@ -141,4 +160,3 @@ impl PrivateAccess {
 }
 
 pub struct PrivateAccess;
-

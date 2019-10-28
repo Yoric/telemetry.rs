@@ -1,7 +1,6 @@
 ///!
 ///! Misc stuff used throughout the crate.
 ///!
-
 use std::ptr;
 
 ///
@@ -90,7 +89,7 @@ impl LinearBuckets {
         LinearBuckets {
             min: min,
             max: max,
-            buckets: buckets
+            buckets: buckets,
         }
     }
 
@@ -111,7 +110,8 @@ impl LinearBuckets {
 /// Partial reimplementation of `Vec::resize`, until this method has
 /// reached the stable version of Rust.
 pub fn vec_resize<T>(vec: &mut Vec<T>, min_len: usize, value: T)
-    where T: Clone
+where
+    T: Clone,
 {
     let len = vec.len();
     if min_len <= len {
@@ -136,14 +136,15 @@ pub fn vec_resize<T>(vec: &mut Vec<T>, min_len: usize, value: T)
 }
 
 pub fn vec_with_size<T>(size: usize, value: T) -> Vec<T>
-    where T: Clone
+where
+    T: Clone,
 {
     let mut vec = Vec::with_capacity(size);
     unsafe {
         // Resize. In future versions of Rust, we should
         // be able to use `vec.resize`.
         vec.set_len(size);
-        for i in 0 .. size {
+        for i in 0..size {
             vec[i] = value.clone();
         }
     }

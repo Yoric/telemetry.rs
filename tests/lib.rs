@@ -3,9 +3,9 @@ use self::rustc_serialize::json::Json;
 
 extern crate telemetry;
 
-use std::sync::Arc;
-use std::sync::mpsc::channel;
 use std::collections::BTreeMap;
+use std::sync::mpsc::channel;
+use std::sync::Arc;
 
 use telemetry::*;
 
@@ -26,14 +26,8 @@ fn create_flags() {
 #[test]
 fn create_linears() {
     let telemetry = Arc::new(Service::new(false));
-    let linear_plain =
-        plain::Linear::new(&telemetry,
-                            "Test linear plain".to_string(),
-                            0, 100, 10);
-    let linear_map =
-        keyed::KeyedLinear::new(&telemetry,
-                                "Test linear map".to_string(),
-                                0, 100, 10);
+    let linear_plain = plain::Linear::new(&telemetry, "Test linear plain".to_string(), 0, 100, 10);
+    let linear_map = keyed::KeyedLinear::new(&telemetry, "Test linear map".to_string(), 0, 100, 10);
 
     linear_plain.record(0);
     linear_map.record("key".to_string(), 0);
@@ -47,39 +41,33 @@ fn create_linears() {
 #[should_panic]
 fn create_linears_bad_1() {
     let telemetry = Arc::new(Service::new(false));
-    let _ : plain::Linear<u32> =
-        plain::Linear::new(&telemetry,
-                            "Test linear plain".to_string(),
-                            0, 100, 0); // Not enough histograms.
-
+    let _: plain::Linear<u32> =
+        plain::Linear::new(&telemetry, "Test linear plain".to_string(), 0, 100, 0);
+    // Not enough histograms.
 }
 
 #[test]
 #[should_panic]
 fn create_linears_bad_2() {
     let telemetry = Arc::new(Service::new(false));
-    let _ : plain::Linear<u32> =
-        plain::Linear::new(&telemetry,
-                            "Test linear plain".to_string(),
-                            0, 0, 1); // min >= max
-
+    let _: plain::Linear<u32> =
+        plain::Linear::new(&telemetry, "Test linear plain".to_string(), 0, 0, 1);
+    // min >= max
 }
 
 #[test]
 #[should_panic]
 fn create_linears_bad_3() {
     let telemetry = Arc::new(Service::new(false));
-    let _ : plain::Linear<u32> =
-        plain::Linear::new(&telemetry,
-                            "Test linear plain".to_string(),
-                            0, 10, 20); // Not enough histograms.
-
+    let _: plain::Linear<u32> =
+        plain::Linear::new(&telemetry, "Test linear plain".to_string(), 0, 10, 20);
+    // Not enough histograms.
 }
 
 enum TestEnum {
     Case1,
     Case2,
-    Case3(String)
+    Case3(String),
 }
 
 impl Flatten for TestEnum {
@@ -87,17 +75,25 @@ impl Flatten for TestEnum {
         match self {
             &TestEnum::Case1 => 0,
             &TestEnum::Case2 => 1,
-            &TestEnum::Case3(_) => 2
+            &TestEnum::Case3(_) => 2,
         }
     }
 }
 
-fn get_all_serialized(telemetry: &Service) -> (Json, Json){
+fn get_all_serialized(telemetry: &Service) -> (Json, Json) {
     let (sender, receiver) = channel();
-    telemetry.to_json(Subset::AllPlain, SerializationFormat::SimpleJson, sender.clone());
+    telemetry.to_json(
+        Subset::AllPlain,
+        SerializationFormat::SimpleJson,
+        sender.clone(),
+    );
     let plain = receiver.recv().unwrap();
 
-    telemetry.to_json(Subset::AllKeyed, SerializationFormat::SimpleJson, sender.clone());
+    telemetry.to_json(
+        Subset::AllKeyed,
+        SerializationFormat::SimpleJson,
+        sender.clone(),
+    );
     let keyed = receiver.recv().unwrap();
     (plain, keyed)
 }
@@ -141,25 +137,26 @@ fn test_serialize_simple() {
     // Compare the map stuff.
     // We're making sure that only our histograms appear.
     let mut all_flag_map = BTreeMap::new();
-    all_flag_map.insert(flag_map_name.clone(),
-                        Json::Array(vec![
-                            Json::String(key1.clone()),
-                            Json::String(key2.clone())
-                                ]));
+    all_flag_map.insert(
+        flag_map_name.clone(),
+        Json::Array(vec![Json::String(key1.clone()), Json::String(key2.clone())]),
+    );
 
     assert_eq!(keyed, Json::Object(all_flag_map));
 
     ////////// Test linears
 
     // Add a plain linear histogram and fill it.
-    let linear_plain_1 = plain::Linear::new(&telemetry, "Test linear plain".to_string(), 0, 100, 10);
+    let linear_plain_1 =
+        plain::Linear::new(&telemetry, "Test linear plain".to_string(), 0, 100, 10);
     linear_plain_1.record(100);
     linear_plain_1.record(99);
     linear_plain_1.record(98);
     linear_plain_1.record(25);
 
     // Add a keyed linear
-    let linear_keyed_1 = keyed::KeyedLinear::new(&telemetry, "Test linear dynamic".to_string(), 0, 100, 10);
+    let linear_keyed_1 =
+        keyed::KeyedLinear::new(&telemetry, "Test linear dynamic".to_string(), 0, 100, 10);
     linear_keyed_1.record("Key 1".to_string(), 120);
     linear_keyed_1.record("Key 1".to_string(), 98);
     linear_keyed_1.record("Key 2".to_string(), 35);
@@ -170,7 +167,11 @@ fn test_serialize_simple() {
     let (plain, keyed) = get_all_serialized(&telemetry);
     if let Json::Object(plain_btree) = plain {
         if let Some(&Json::Array(ref array)) = plain_btree.get(&"Test linear plain".to_string()) {
-            let expect : Vec<Json> = vec![0, 0, 1, 0, 0, 0, 0, 0, 0, 3].iter().cloned().map(Json::I64).collect();
+            let expect: Vec<Json> = vec![0, 0, 1, 0, 0, 0, 0, 0, 0, 3]
+                .iter()
+                .cloned()
+                .map(Json::I64)
+                .collect();
             assert_eq!(*array, expect);
         } else {
             panic!("No record for the histogram");
@@ -180,16 +181,26 @@ fn test_serialize_simple() {
     }
 
     if let Json::Object(keyed_btree) = keyed {
-        if let Some(&Json::Object(ref hist_btree)) = keyed_btree.get(&"Test linear dynamic".to_string()) {
+        if let Some(&Json::Object(ref hist_btree)) =
+            keyed_btree.get(&"Test linear dynamic".to_string())
+        {
             assert_eq!(hist_btree.len(), 2);
             if let Some(&Json::Array(ref array)) = hist_btree.get(&"Key 1".to_string()) {
-                let expect : Vec<Json> = vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 2].iter().cloned().map(Json::I64).collect();
+                let expect: Vec<Json> = vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 2]
+                    .iter()
+                    .cloned()
+                    .map(Json::I64)
+                    .collect();
                 assert_eq!(*array, expect);
             } else {
                 panic!("No key 1");
             }
             if let Some(&Json::Array(ref array)) = hist_btree.get(&"Key 2".to_string()) {
-                let expect : Vec<Json> = vec![0, 0, 0, 1, 0, 1, 0, 0, 0, 0].iter().cloned().map(Json::I64).collect();
+                let expect: Vec<Json> = vec![0, 0, 0, 1, 0, 1, 0, 0, 0, 0]
+                    .iter()
+                    .cloned()
+                    .map(Json::I64)
+                    .collect();
                 assert_eq!(*array, expect);
             } else {
                 panic!("No key 2");
@@ -200,7 +211,6 @@ fn test_serialize_simple() {
     } else {
         panic!("Not a Json object");
     }
-
 
     ////////// Test count
     let count_1 = plain::Count::new(&telemetry, "Count 1".to_string());
@@ -236,7 +246,6 @@ fn test_serialize_simple() {
         panic!("Not a Json object");
     }
 
-
     ////////// Test Enum
     let enum_1 = plain::Enum::new(&telemetry, "Enum 1".to_string());
     enum_1.record(TestEnum::Case2);
@@ -271,6 +280,4 @@ fn test_serialize_simple() {
     } else {
         panic!("Not a Json object");
     }
-
 }
-
