@@ -12,15 +12,14 @@ use self::vec_map::VecMap;
 extern crate rustc_serialize;
 use self::rustc_serialize::json::Json;
 
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::collections::{BTreeMap, HashSet};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, Sender};
+use std::sync::Arc;
 
-use indexing::{Key};
+use indexing::Key;
 use misc::*;
 use service::{PrivateAccess, Service};
-
 
 ///
 /// Low-level, untyped, implementation of plain histogram storage.
@@ -37,7 +36,6 @@ pub trait KeyedRawStorage: Send {
     fn store(&mut self, key: String, value: u32);
     fn to_json(&self, format: &SerializationFormat) -> Json;
 }
-
 
 /// Operations used to communicate with the TelemetryTask.
 pub enum Op {
@@ -69,7 +67,7 @@ pub enum Op {
 
     /// Terminate the thread immediately. Any further attempt to
     /// communicate with the tread will panic.
-    Terminate
+    Terminate,
 }
 
 ///
@@ -112,18 +110,23 @@ impl TelemetryTask {
                     match what {
                         Subset::AllPlain => {
                             for ref histogram in self.plain.values() {
-                                object.insert(histogram.name.clone(), histogram.contents.to_json(&format));
+                                object.insert(
+                                    histogram.name.clone(),
+                                    histogram.contents.to_json(&format),
+                                );
                             }
-                        },
+                        }
                         Subset::AllKeyed => {
                             for ref histogram in self.keyed.values() {
-                                object.insert(histogram.name.clone(), histogram.contents.to_json(&format));
+                                object.insert(
+                                    histogram.name.clone(),
+                                    histogram.contents.to_json(&format),
+                                );
                             }
-
                         }
                     }
                     sender.send(Json::Object(object)).unwrap();
-                },
+                }
                 Op::Terminate => {
                     return;
                 }
@@ -146,14 +149,16 @@ pub struct TelemetryTask {
     keys: HashSet<String>,
 }
 
-
 ///
 /// Features shared by all histograms
 ///
 /// `K` is the kind of user keys, either `Plain` for a plain
 /// histogram or `Keyed<T>` for a keyed histogram with user keys of
 /// type `T`.
-impl<K> BackEnd<K> where K: Clone {
+impl<K> BackEnd<K>
+where
+    K: Clone,
+{
     /// Create a new back-end attached to a service and a key.
     pub fn new(service: &Service, key: Key<K>) -> BackEnd<K> {
         BackEnd {
@@ -174,7 +179,10 @@ impl<K> BackEnd<K> where K: Clone {
 }
 
 #[derive(Clone)]
-pub struct BackEnd<K> where K: Clone {
+pub struct BackEnd<K>
+where
+    K: Clone,
+{
     /// The key used to communicate with the `TelemetryTask`.
     key: Key<K>,
 
