@@ -108,44 +108,10 @@ impl LinearBuckets {
     }
 }
 
-/// Partial reimplementation of `Vec::resize`, until this method has
-/// reached the stable version of Rust.
-pub fn vec_resize<T>(vec: &mut Vec<T>, min_len: usize, value: T)
-    where T: Clone
-{
-    let len = vec.len();
-    if min_len <= len {
-        return;
-    }
-    let delta = min_len - len;
-    vec.reserve(delta);
-    unsafe {
-        let mut ptr = vec.as_mut_ptr().offset(len as isize);
-        // Write all elements except the last one
-        for i in 1..delta {
-            ptr::write(ptr, value.clone());
-            ptr = ptr.offset(1);
-            // Increment the length in every step in case clone() panics
-            vec.set_len(len + i);
-        }
-
-        // We can write the last element directly without cloning needlessly
-        ptr::write(ptr, value);
-        vec.set_len(len + delta);
-    }
-}
-
 pub fn vec_with_size<T>(size: usize, value: T) -> Vec<T>
     where T: Clone
 {
     let mut vec = Vec::with_capacity(size);
-    unsafe {
-        // Resize. In future versions of Rust, we should
-        // be able to use `vec.resize`.
-        vec.set_len(size);
-        for i in 0 .. size {
-            vec[i] = value.clone();
-        }
-    }
+    vec.resize(size, value);
     vec
 }

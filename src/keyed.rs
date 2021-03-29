@@ -14,7 +14,7 @@ use std::collections::hash_map::Entry::{Occupied, Vacant};
 use std::marker::PhantomData;
 use std::mem::size_of;
 
-use misc::{Flatten, LinearBuckets, SerializationFormat, vec_resize, vec_with_size};
+use misc::{Flatten, LinearBuckets, SerializationFormat, vec_with_size};
 use task::{BackEnd, Op, KeyedRawStorage};
 use service::{Service, PrivateAccess};
 use indexing::*;
@@ -448,12 +448,12 @@ impl KeyedRawStorage for KeyedEnumStorage {
         match self.values.entry(key) {
             Occupied(mut e) => {
                 let mut vec = e.get_mut();
-                vec_resize(&mut vec, value as usize + 1, 0);
+                vec.resize(value as usize + 1, 0);
                 vec[value as usize] += 1;
             }
             Vacant(e) => {
                 let mut vec = Vec::new();
-                vec_resize(&mut vec, value as usize + 1, 0);
+                vec.resize(value as usize + 1, 0);
                 vec[value as usize] = 1;
                 e.insert(vec);
             }

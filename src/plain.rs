@@ -13,7 +13,7 @@ use std::marker::PhantomData;
 use std::mem::size_of;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use misc::{Flatten, LinearBuckets, SerializationFormat, vec_resize, vec_with_size};
+use misc::{Flatten, LinearBuckets, SerializationFormat, vec_with_size};
 use task::{BackEnd, Op, PlainRawStorage};
 use service::{Service, PrivateAccess};
 use indexing::*;
@@ -409,7 +409,7 @@ struct EnumStorage {
 
 impl PlainRawStorage for EnumStorage {
     fn store(&mut self, value: u32) {
-        vec_resize(&mut self.values, value as usize + 1, 0);
+        self.values.resize(value as usize + 1, 0);
         self.values[value as usize] += 1;
     }
     fn to_json(&self, format: &SerializationFormat) -> Json {
