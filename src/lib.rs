@@ -35,7 +35,6 @@
 
 extern crate rustc_serialize;
 
-
 mod misc;
 
 /// Data that may be converted to numbers for storage in a histogram.
@@ -67,9 +66,3 @@ mod service;
 
 /// The Telemetry Service. You need one (or more) per application.
 pub use service::Service;
-
-
-
-
-
-

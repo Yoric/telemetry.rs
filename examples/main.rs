@@ -1,31 +1,31 @@
 //! A simple example demonstrating how to use Telemetry to measure and
 //! store performance data, then eventually dump it to console/disk.
 
-use std::thread;
-use std::sync::mpsc::channel;
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::Write;
+use std::sync::mpsc::channel;
+use std::thread;
 
 extern crate rustc_serialize;
 use rustc_serialize::json::Json;
 
 extern crate time;
-use time::Duration;
 
 extern crate telemetry;
 use telemetry::plain::*;
-use telemetry::Flatten;
-
 
 // A stopwatch for microsecond precision.
 struct StopwatchUS {
-    pub value: time::Duration
+    pub value: time::Duration,
 }
 impl StopwatchUS {
-    fn span<F>(f: F) -> StopwatchUS where F: FnOnce() {
+    fn span<F>(f: F) -> StopwatchUS
+    where
+        F: FnOnce(),
+    {
         StopwatchUS {
-            value: time::Duration::span(f)
+            value: time::Duration::span(f),
         }
     }
 }
@@ -35,7 +35,7 @@ impl telemetry::Flatten for StopwatchUS {
             Some(x) if x >= std::u32::MAX as i64 => std::u32::MAX,
             Some(x) if x <= 0 => 0,
             Some(x) => x as u32,
-            None => std::u32::MAX
+            None => std::u32::MAX,
         }
     }
 }
@@ -43,7 +43,7 @@ impl telemetry::Flatten for StopwatchUS {
 struct Histograms {
     /// The duration of execution of a recursive implementation of
     /// Fibonacci's function, in microseconds.
-    fibonacci_us: telemetry::plain::Linear<StopwatchUS>
+    fibonacci_us: telemetry::plain::Linear<StopwatchUS>,
 }
 
 fn fibonacci(i: u32) -> u32 {
@@ -61,9 +61,10 @@ fn main() {
         fibonacci_us: telemetry::plain::Linear::new(
             &telemetry,
             "FIBONACCI_DURATION_US".to_string(),
-            0 /* min */,
-            1_000_000 /* max */,
-            20 /* buckets */)
+            0,         /* min */
+            1_000_000, /* max */
+            20,        /* buckets */
+        ),
     };
 
     // Measure a number of durations.
@@ -71,7 +72,9 @@ fn main() {
     for _ in 1..10 {
         let hist = histograms.fibonacci_us.clone();
         handles.push(thread::spawn(move || {
-            hist.record(StopwatchUS::span(|| {fibonacci(30);}));
+            hist.record(StopwatchUS::span(|| {
+                fibonacci(30);
+            }));
         }));
     }
 
@@ -81,10 +84,14 @@ fn main() {
 
     // Now look at the histogram.
     let (sender, receiver) = channel();
-    telemetry.to_json(telemetry::Subset::AllPlain, telemetry::SerializationFormat::SimpleJson, sender.clone());
+    telemetry.to_json(
+        telemetry::Subset::AllPlain,
+        telemetry::SerializationFormat::SimpleJson,
+        sender,
+    );
     let plain = receiver.recv().unwrap();
 
-    print!("{}\n", plain);
+    println!("{}", plain);
 
     // Assemble the histograms payload into a whole.
     // For this example, we are not attempting to match a specific protocol.
@@ -93,10 +100,16 @@ fn main() {
 
     // If we had keyed histograms, we should put them here, too.
     // Now, add metadata.
-    storage.insert("application".to_string(), Json::String("telemetry example app".to_string()));
-    storage.insert("version".to_string(), Json::Array(vec![Json::I64(0), Json::I64(1), Json::I64(0)]));
+    storage.insert(
+        "application".to_string(),
+        Json::String("telemetry example app".to_string()),
+    );
+    storage.insert(
+        "version".to_string(),
+        Json::Array(vec![Json::I64(0), Json::I64(1), Json::I64(0)]),
+    );
 
-    print!("{}\n", Json::Object(storage.clone()).pretty());
+    println!("{}", Json::Object(storage.clone()).pretty());
 
     // Write to disk.
     let data = format!("{}\n", Json::Object(storage));

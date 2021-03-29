@@ -12,22 +12,21 @@ use self::vec_map::VecMap;
 extern crate rustc_serialize;
 use self::rustc_serialize::json::Json;
 
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::collections::{BTreeMap, HashSet};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, Sender};
+use std::sync::Arc;
 
-use indexing::{Key};
+use indexing::Key;
 use misc::*;
 use service::{PrivateAccess, Service};
-
 
 ///
 /// Low-level, untyped, implementation of plain histogram storage.
 ///
 pub trait PlainRawStorage: Send {
     fn store(&mut self, value: u32);
-    fn to_json(&self, &SerializationFormat) -> Json;
+    fn to_json(&self, format: &SerializationFormat) -> Json;
 }
 
 ///
@@ -38,20 +37,19 @@ pub trait KeyedRawStorage: Send {
     fn to_json(&self, format: &SerializationFormat) -> Json;
 }
 
-
 /// Operations used to communicate with the TelemetryTask.
 pub enum Op {
     /// `RegisterPlain(key, storage)` returns a plain histogram with
     /// key `key`. The key must be previously unused, otherwise panic.
     /// Unicity of the key is enforced through the use of a
     /// [KeyGenerator](../misc/struct.KeyGenerator.html).
-    RegisterPlain(usize, NamedStorage<PlainRawStorage>),
+    RegisterPlain(usize, NamedStorage<dyn PlainRawStorage>),
 
     /// `RegisterPlain(key, storage)` returns a plain histogram with
     /// key `key`. The key must be previously unused, otherwise panic.
     /// Unicity of the key is enforced through the use of a
     /// [KeyGenerator](../misc/struct.KeyGenerator.html).
-    RegisterKeyed(usize, NamedStorage<KeyedRawStorage>),
+    RegisterKeyed(usize, NamedStorage<dyn KeyedRawStorage>),
 
     /// `RecordPlain(key, value)` records value `value` in the plain
     /// histogram registered with key `key`.` The key must be
@@ -69,7 +67,7 @@ pub enum Op {
 
     /// Terminate the thread immediately. Any further attempt to
     /// communicate with the tread will panic.
-    Terminate
+    Terminate,
 }
 
 ///
@@ -81,7 +79,7 @@ impl TelemetryTask {
         TelemetryTask {
             plain: VecMap::new(),
             keyed: VecMap::new(),
-            receiver: receiver,
+            receiver,
             keys: HashSet::new(),
         }
     }
@@ -100,11 +98,11 @@ impl TelemetryTask {
                     self.keyed.insert(index, storage);
                 }
                 Op::RecordPlain(index, value) => {
-                    let ref mut storage = self.plain.get_mut(&index).unwrap();
+                    let storage = self.plain.get_mut(&index).unwrap();
                     storage.contents.store(value);
                 }
                 Op::RecordKeyed(index, key, value) => {
-                    let ref mut storage = self.keyed.get_mut(&index).unwrap();
+                    let storage = self.keyed.get_mut(&index).unwrap();
                     storage.contents.store(key, value);
                 }
                 Op::Serialize(what, format, sender) => {
@@ -112,18 +110,23 @@ impl TelemetryTask {
                     match what {
                         Subset::AllPlain => {
                             for ref histogram in self.plain.values() {
-                                object.insert(histogram.name.clone(), histogram.contents.to_json(&format));
+                                object.insert(
+                                    histogram.name.clone(),
+                                    histogram.contents.to_json(&format),
+                                );
                             }
-                        },
+                        }
                         Subset::AllKeyed => {
                             for ref histogram in self.keyed.values() {
-                                object.insert(histogram.name.clone(), histogram.contents.to_json(&format));
+                                object.insert(
+                                    histogram.name.clone(),
+                                    histogram.contents.to_json(&format),
+                                );
                             }
-
                         }
                     }
                     sender.send(Json::Object(object)).unwrap();
-                },
+                }
                 Op::Terminate => {
                     return;
                 }
@@ -134,10 +137,10 @@ impl TelemetryTask {
 
 pub struct TelemetryTask {
     /// Plain histograms.
-    plain: VecMap<NamedStorage<PlainRawStorage>>,
+    plain: VecMap<NamedStorage<dyn PlainRawStorage>>,
 
     /// Keyed histograms.
-    keyed: VecMap<NamedStorage<KeyedRawStorage>>,
+    keyed: VecMap<NamedStorage<dyn KeyedRawStorage>>,
 
     /// The channel used by the task to receive data.
     receiver: Receiver<Op>,
@@ -146,18 +149,20 @@ pub struct TelemetryTask {
     keys: HashSet<String>,
 }
 
-
 ///
 /// Features shared by all histograms
 ///
 /// `K` is the kind of user keys, either `Plain` for a plain
 /// histogram or `Keyed<T>` for a keyed histogram with user keys of
 /// type `T`.
-impl<K> BackEnd<K> where K: Clone {
+impl<K> BackEnd<K>
+where
+    K: Clone,
+{
     /// Create a new back-end attached to a service and a key.
     pub fn new(service: &Service, key: Key<K>) -> BackEnd<K> {
         BackEnd {
-            key: key,
+            key,
             is_active: PrivateAccess::get_is_active(service).clone(),
             sender: PrivateAccess::get_sender(service).clone(),
         }
@@ -174,7 +179,10 @@ impl<K> BackEnd<K> where K: Clone {
 }
 
 #[derive(Clone)]
-pub struct BackEnd<K> where K: Clone {
+pub struct BackEnd<K>
+where
+    K: Clone,
+{
     /// The key used to communicate with the `TelemetryTask`.
     key: Key<K>,
 

@@ -9,15 +9,15 @@
 
 use rustc_serialize::json::Json;
 
-use std::collections::{BTreeMap, HashMap, HashSet};
 use std::collections::hash_map::Entry::{Occupied, Vacant};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::marker::PhantomData;
 use std::mem::size_of;
 
-use misc::{Flatten, LinearBuckets, SerializationFormat, vec_with_size};
-use task::{BackEnd, Op, KeyedRawStorage};
-use service::{Service, PrivateAccess};
 use indexing::*;
+use misc::{vec_with_size, Flatten, LinearBuckets, SerializationFormat};
+use service::{PrivateAccess, Service};
+use task::{BackEnd, KeyedRawStorage, Op};
 
 ///
 /// A family of histograms, indexed by some dynamic value. Use these
@@ -40,7 +40,7 @@ use indexing::*;
 /// recording data is comparable to the duration of sending a simple
 /// message to a `Sender`.
 ///
-pub trait KeyedHistogram<K, T> : Clone {
+pub trait KeyedHistogram<K, T>: Clone {
     ///
     /// Record a value in this histogram.
     ///
@@ -57,20 +57,31 @@ pub trait KeyedHistogram<K, T> : Clone {
     ///
     /// If the callback returns `None`, no value is recorded.
     ///
-    fn record_cb<F>(&self, _: F) where F: FnOnce() -> Option<(K, T)>;
+    fn record_cb<F>(&self, _: F)
+    where
+        F: FnOnce() -> Option<(K, T)>;
 }
 
 /// Back-end features specific to keyed histograms.
-impl<K> BackEnd<Keyed<K>> where K: ToString {
+impl<K> BackEnd<Keyed<K>>
+where
+    K: ToString,
+{
     /// Instruct the Telemetry Task to record a value in an
     /// already registered histogram.
     fn raw_record(&self, k: &Key<Keyed<K>>, key: String, value: u32) {
-        self.sender.send(Op::RecordKeyed(k.index, key, value)).unwrap();
+        self.sender
+            .send(Op::RecordKeyed(k.index, key, value))
+            .unwrap();
     }
 
     /// Instruct the Telemetry Task to record the result of a callback
     /// in an already registered histogram.
-    fn raw_record_cb<F, T>(&self, cb: F) -> bool where F: FnOnce() -> Option<(K, T)>, T: Flatten {
+    fn raw_record_cb<F, T>(&self, cb: F) -> bool
+    where
+        F: FnOnce() -> Option<(K, T)>,
+        T: Flatten,
+    {
         if let Some(k) = self.get_key() {
             if let Some((key, v)) = cb() {
                 self.raw_record(&k, key.to_string(), v.as_u32());
@@ -92,6 +103,7 @@ impl<K> BackEnd<Keyed<K>> where K: ToString {
 /// of the application) or during startup (e.g. depending on
 /// command-line options).
 ///
+#[derive(Default)]
 pub struct KeyedIgnoring<T, U> {
     witness: PhantomData<(T, U)>,
 }
@@ -105,24 +117,26 @@ impl<T, U> KeyedIgnoring<T, U> {
     //
     pub fn new() -> KeyedIgnoring<T, U> {
         KeyedIgnoring {
-            witness: PhantomData
+            witness: PhantomData,
         }
     }
 }
 
 impl<K, T> KeyedHistogram<K, T> for KeyedIgnoring<K, T> {
-    fn record_cb<F>(&self, _: F) where F: FnOnce() -> Option<(K, T)>  {
-        return;
+    fn record_cb<F>(&self, _: F)
+    where
+        F: FnOnce() -> Option<(K, T)>,
+    {
+        // Nothing to do.
     }
 }
 
 impl<T, U> Clone for KeyedIgnoring<T, U> {
     fn clone(&self) -> Self {
         KeyedIgnoring {
-            witness: PhantomData
+            witness: PhantomData,
         }
     }
-
 }
 
 ///
@@ -140,13 +154,17 @@ impl<T, U> Clone for KeyedIgnoring<T, U> {
 /// Keys are sorted by alphabetical order, and appear only once.
 ///
 pub struct KeyedFlag<T> {
-    back_end: BackEnd<Keyed<T>>
+    back_end: BackEnd<Keyed<T>>,
 }
 
-
-impl<K> KeyedFlag<K> where K: ToString {
+impl<K> KeyedFlag<K>
+where
+    K: ToString,
+{
     pub fn new(service: &Service, name: String) -> KeyedFlag<K> {
-        let storage = Box::new(KeyedFlagStorage { encountered: HashSet::new() });
+        let storage = Box::new(KeyedFlagStorage {
+            encountered: HashSet::new(),
+        });
         let key = PrivateAccess::register_keyed(service, name, storage);
         KeyedFlag {
             back_end: BackEnd::new(service, key),
@@ -155,7 +173,7 @@ impl<K> KeyedFlag<K> where K: ToString {
 }
 
 struct KeyedFlagStorage {
-    encountered: HashSet<String>
+    encountered: HashSet<String>,
 }
 
 impl KeyedRawStorage for KeyedFlagStorage {
@@ -164,9 +182,9 @@ impl KeyedRawStorage for KeyedFlagStorage {
     }
     fn to_json(&self, format: &SerializationFormat) -> Json {
         match format {
-            &SerializationFormat::SimpleJson => {
+            SerializationFormat::SimpleJson => {
                 // Collect and sort the keys.
-                let mut keys : Vec<&String> = self.encountered.iter().collect();
+                let mut keys: Vec<&String> = self.encountered.iter().collect();
                 keys.sort();
                 let array = keys.iter().map(|&x| Json::String(x.clone())).collect();
                 Json::Array(array)
@@ -175,8 +193,14 @@ impl KeyedRawStorage for KeyedFlagStorage {
     }
 }
 
-impl<K> KeyedHistogram<K, ()> for KeyedFlag<K> where K: ToString {
-    fn record_cb<F>(&self, cb: F) where F: FnOnce() -> Option<(K, ())>  {
+impl<K> KeyedHistogram<K, ()> for KeyedFlag<K>
+where
+    K: ToString,
+{
+    fn record_cb<F>(&self, cb: F)
+    where
+        F: FnOnce() -> Option<(K, ())>,
+    {
         self.back_end.raw_record_cb(cb);
     }
 }
@@ -184,10 +208,9 @@ impl<K> KeyedHistogram<K, ()> for KeyedFlag<K> where K: ToString {
 impl<T> Clone for KeyedFlag<T> {
     fn clone(&self) -> Self {
         KeyedFlag {
-            back_end: self.back_end.clone()
+            back_end: self.back_end.clone(),
         }
     }
-
 }
 
 ///
@@ -213,11 +236,13 @@ impl<T> Clone for KeyedFlag<T> {
 /// where each `array_i` is an array of numbers, one per bucket, in
 /// the numeric order of buckets
 ///
-pub struct KeyedLinear<K, T> where T: Flatten {
+pub struct KeyedLinear<K, T>
+where
+    T: Flatten,
+{
     witness: PhantomData<T>,
     back_end: BackEnd<Keyed<K>>,
 }
-
 
 type KeyedLinearBuckets = LinearBuckets;
 
@@ -230,7 +255,7 @@ impl KeyedLinearStorage {
     fn new(shape: KeyedLinearBuckets) -> KeyedLinearStorage {
         KeyedLinearStorage {
             values: HashMap::new(),
-            shape: shape
+            shape,
         }
     }
 }
@@ -251,7 +276,7 @@ impl KeyedRawStorage for KeyedLinearStorage {
     }
     fn to_json(&self, _: &SerializationFormat) -> Json {
         // Sort keys, for easier testing/comparison.
-        let mut values : Vec<_> = self.values.iter().collect();
+        let mut values: Vec<_> = self.values.iter().collect();
         values.sort();
         // Turn everything into an object.
         let mut tree = BTreeMap::new();
@@ -264,8 +289,11 @@ impl KeyedRawStorage for KeyedLinearStorage {
     }
 }
 
-
-impl<K, T> KeyedLinear<K, T> where K: ToString, T: Flatten {
+impl<K, T> KeyedLinear<K, T>
+where
+    K: ToString,
+    T: Flatten,
+{
     ///
     /// Create a new Linear histogram with a given name.
     ///
@@ -303,7 +331,13 @@ impl<K, T> KeyedLinear<K, T> where K: ToString, T: Flatten {
     ///
     /// If `buckets < max - min + 1`.
     ///
-    pub fn new(service: &Service, name: String, min: u32, max: u32, buckets: usize) -> KeyedLinear<K, T> {
+    pub fn new(
+        service: &Service,
+        name: String,
+        min: u32,
+        max: u32,
+        buckets: usize,
+    ) -> KeyedLinear<K, T> {
         assert!(size_of::<u32>() <= size_of::<usize>());
         assert!(min < max);
         assert!(max - min >= buckets as u32);
@@ -317,20 +351,29 @@ impl<K, T> KeyedLinear<K, T> where K: ToString, T: Flatten {
     }
 }
 
-impl<K, T> KeyedHistogram<K, T> for KeyedLinear<K, T> where K: ToString, T: Flatten {
-    fn record_cb<F>(&self, cb: F) where F: FnOnce() -> Option<(K, T)>  {
+impl<K, T> KeyedHistogram<K, T> for KeyedLinear<K, T>
+where
+    K: ToString,
+    T: Flatten,
+{
+    fn record_cb<F>(&self, cb: F)
+    where
+        F: FnOnce() -> Option<(K, T)>,
+    {
         self.back_end.raw_record_cb(cb);
     }
 }
 
-impl<K, T> Clone for KeyedLinear<K, T> where T: Flatten {
+impl<K, T> Clone for KeyedLinear<K, T>
+where
+    T: Flatten,
+{
     fn clone(&self) -> Self {
         KeyedLinear {
             back_end: self.back_end.clone(),
-            witness: PhantomData
+            witness: PhantomData,
         }
     }
-
 }
 
 ///
@@ -357,7 +400,7 @@ impl KeyedRawStorage for KeyedCountStorage {
     fn store(&mut self, key: String, value: u32) {
         match self.values.entry(key) {
             Occupied(mut e) => {
-                let v = e.get().clone();
+                let v = *e.get();
                 e.insert(v + value);
             }
             Vacant(e) => {
@@ -367,15 +410,15 @@ impl KeyedRawStorage for KeyedCountStorage {
     }
     fn to_json(&self, format: &SerializationFormat) -> Json {
         match format {
-            &SerializationFormat::SimpleJson => {
+            SerializationFormat::SimpleJson => {
                 // Sort keys, for easier testing/comparison.
-                let mut values : Vec<_> = self.values.iter().collect();
+                let mut values: Vec<_> = self.values.iter().collect();
                 values.sort();
                 // Turn everything into an object.
                 let mut tree = BTreeMap::new();
                 for value in values {
                     let (name, val) = value;
-                    tree.insert(name.clone(), Json::I64(val.clone() as i64));
+                    tree.insert(name.clone(), Json::I64(*val as i64));
                 }
                 Json::Object(tree)
             }
@@ -383,12 +426,17 @@ impl KeyedRawStorage for KeyedCountStorage {
     }
 }
 
-impl<K> KeyedHistogram<K, u32> for KeyedCount<K> where K: ToString {
-    fn record_cb<F>(&self, cb: F) where F: FnOnce() -> Option<(K, u32)>  {
+impl<K> KeyedHistogram<K, u32> for KeyedCount<K>
+where
+    K: ToString,
+{
+    fn record_cb<F>(&self, cb: F)
+    where
+        F: FnOnce() -> Option<(K, u32)>,
+    {
         self.back_end.raw_record_cb(cb);
     }
 }
-
 
 impl<K> KeyedCount<K> {
     ///
@@ -402,7 +450,9 @@ impl<K> KeyedCount<K> {
     /// If `name` is already used by another histogram in `service`.
     ///
     pub fn new(service: &Service, name: String) -> KeyedCount<K> {
-        let storage = Box::new(KeyedCountStorage { values: HashMap::new() });
+        let storage = Box::new(KeyedCountStorage {
+            values: HashMap::new(),
+        });
         let key = PrivateAccess::register_keyed(service, name, storage);
         KeyedCount {
             back_end: BackEnd::new(service, key),
@@ -413,10 +463,9 @@ impl<K> KeyedCount<K> {
 impl<K> Clone for KeyedCount<K> {
     fn clone(&self) -> Self {
         KeyedCount {
-            back_end: self.back_end.clone()
+            back_end: self.back_end.clone(),
         }
     }
-
 }
 
 ///
@@ -433,7 +482,11 @@ impl<K> Clone for KeyedCount<K> {
 /// serialized as an object, one field per key (sorted), with value an
 /// array of numbers, in the order of enum values.
 ///
-pub struct KeyedEnum<K, T> where K: ToString, T: Flatten {
+pub struct KeyedEnum<K, T>
+where
+    K: ToString,
+    T: Flatten,
+{
     witness: PhantomData<T>,
     back_end: BackEnd<Keyed<K>>,
 }
@@ -447,7 +500,7 @@ impl KeyedRawStorage for KeyedEnumStorage {
     fn store(&mut self, key: String, value: u32) {
         match self.values.entry(key) {
             Occupied(mut e) => {
-                let mut vec = e.get_mut();
+                let vec = e.get_mut();
                 vec.resize(value as usize + 1, 0);
                 vec[value as usize] += 1;
             }
@@ -461,15 +514,15 @@ impl KeyedRawStorage for KeyedEnumStorage {
     }
     fn to_json(&self, format: &SerializationFormat) -> Json {
         match format {
-            &SerializationFormat::SimpleJson => {
+            SerializationFormat::SimpleJson => {
                 // Sort keys, for easier testing/comparison.
-                let mut values : Vec<_> = self.values.iter().collect();
+                let mut values: Vec<_> = self.values.iter().collect();
                 values.sort();
                 // Turn everything into an object.
                 let mut tree = BTreeMap::new();
                 for value in values {
                     let (name, array) = value;
-                    let vec  = array.iter().map(|&x| Json::I64(x.clone() as i64)).collect();
+                    let vec = array.iter().map(|&x| Json::I64(x as i64)).collect();
                     tree.insert(name.clone(), Json::Array(vec));
                 }
                 Json::Object(tree)
@@ -478,18 +531,29 @@ impl KeyedRawStorage for KeyedEnumStorage {
     }
 }
 
-impl<K, T> KeyedHistogram<K, T> for KeyedEnum<K, T> where K: ToString, T: Flatten {
+impl<K, T> KeyedHistogram<K, T> for KeyedEnum<K, T>
+where
+    K: ToString,
+    T: Flatten,
+{
     ///
     /// Record a value.
     ///
     /// Actual recording takes place on the background thread.
     ///
-    fn record_cb<F>(&self, cb: F) where F: FnOnce() -> Option<(K, T)>  {
+    fn record_cb<F>(&self, cb: F)
+    where
+        F: FnOnce() -> Option<(K, T)>,
+    {
         self.back_end.raw_record_cb(cb);
     }
 }
 
-impl<K, T> KeyedEnum<K, T> where K: ToString, T:Flatten {
+impl<K, T> KeyedEnum<K, T>
+where
+    K: ToString,
+    T: Flatten,
+{
     ///
     /// Create a new Enum histogram with a given name.
     ///
@@ -512,12 +576,15 @@ impl<K, T> KeyedEnum<K, T> where K: ToString, T:Flatten {
     }
 }
 
-impl<K, T> Clone for KeyedEnum<K, T> where K: ToString, T: Flatten {
+impl<K, T> Clone for KeyedEnum<K, T>
+where
+    K: ToString,
+    T: Flatten,
+{
     fn clone(&self) -> Self {
         KeyedEnum {
             back_end: self.back_end.clone(),
             witness: PhantomData,
         }
     }
-
 }

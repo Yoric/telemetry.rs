@@ -13,10 +13,10 @@ use std::marker::PhantomData;
 use std::mem::size_of;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use misc::{Flatten, LinearBuckets, SerializationFormat, vec_with_size};
-use task::{BackEnd, Op, PlainRawStorage};
-use service::{Service, PrivateAccess};
 use indexing::*;
+use misc::{vec_with_size, Flatten, LinearBuckets, SerializationFormat};
+use service::{PrivateAccess, Service};
+use task::{BackEnd, Op, PlainRawStorage};
 
 ///
 /// A plain histogram.
@@ -37,7 +37,7 @@ use indexing::*;
 /// recording data is comparable to the duration of sending a simple
 /// message to a `Sender`.
 ///
-pub trait Histogram<T> : Clone {
+pub trait Histogram<T>: Clone {
     ///
     /// Record a value in this histogram.
     ///
@@ -54,9 +54,10 @@ pub trait Histogram<T> : Clone {
     ///
     /// If the callback returns `None`, no value is recorded.
     ///
-    fn record_cb<F>(&self, _: F) where F: FnOnce() -> Option<T>;
+    fn record_cb<F>(&self, _: F)
+    where
+        F: FnOnce() -> Option<T>;
 }
-
 
 /// Back-end features specific to plain histograms.
 impl BackEnd<Plain> {
@@ -68,7 +69,11 @@ impl BackEnd<Plain> {
 
     /// Instruct the Telemetry Task to record the result of a callback
     /// in an already registered histogram.
-    fn raw_record_cb<F, T>(&self, cb: F) -> bool where F: FnOnce() -> Option<T>, T: Flatten {
+    fn raw_record_cb<F, T>(&self, cb: F) -> bool
+    where
+        F: FnOnce() -> Option<T>,
+        T: Flatten,
+    {
         if let Some(k) = self.get_key() {
             if let Some(v) = cb() {
                 self.raw_record(&k, v.as_u32());
@@ -90,6 +95,7 @@ impl BackEnd<Plain> {
 /// of the application) or during startup (e.g. depending on
 /// command-line options).
 ///
+#[derive(Default)]
 pub struct Ignoring<T> {
     witness: PhantomData<T>,
 }
@@ -103,21 +109,24 @@ impl<T> Ignoring<T> {
     ///
     pub fn new() -> Ignoring<T> {
         Ignoring {
-            witness: PhantomData
+            witness: PhantomData,
         }
     }
 }
 
 impl<T> Histogram<T> for Ignoring<T> {
-    fn record_cb<F>(&self, _: F) where F: FnOnce() -> Option<T>  {
-        return;
+    fn record_cb<F>(&self, _: F)
+    where
+        F: FnOnce() -> Option<T>,
+    {
+        // Nothing to do.
     }
 }
 
 impl<T> Clone for Ignoring<T> {
     fn clone(&self) -> Self {
         Ignoring {
-            witness: PhantomData
+            witness: PhantomData,
         }
     }
 }
@@ -145,7 +154,7 @@ pub struct Flag {
 /// The storage, owned by the Telemetry Task.
 struct FlagStorage {
     /// `true` once we have called `record`, `false` until then.
-    encountered: bool
+    encountered: bool,
 }
 
 impl PlainRawStorage for FlagStorage {
@@ -154,15 +163,16 @@ impl PlainRawStorage for FlagStorage {
     }
     fn to_json(&self, format: &SerializationFormat) -> Json {
         match format {
-            &SerializationFormat::SimpleJson => {
-                Json::I64(if self.encountered { 1 } else { 0 })
-            }
+            SerializationFormat::SimpleJson => Json::I64(if self.encountered { 1 } else { 0 }),
         }
     }
 }
 
 impl Histogram<()> for Flag {
-    fn record_cb<F>(&self, cb: F) where F: FnOnce() -> Option<()>  {
+    fn record_cb<F>(&self, cb: F)
+    where
+        F: FnOnce() -> Option<()>,
+    {
         if self.cache.load(Ordering::Relaxed) {
             // Don't bother with dereferencing values or sending
             // messages, the histogram is already full.
@@ -173,7 +183,6 @@ impl Histogram<()> for Flag {
         }
     }
 }
-
 
 impl Flag {
     ///
@@ -220,18 +229,30 @@ impl Clone for Flag {
 /// With `SerializationFormat::SimpleJson`, these histograms are
 /// serialized as an array of numbers, one per bucket, in the numeric
 /// order of buckets.
-pub struct Linear<T> where T: Flatten {
+pub struct Linear<T>
+where
+    T: Flatten,
+{
     witness: PhantomData<T>,
     back_end: BackEnd<Plain>,
 }
 
-impl<T> Histogram<T> for Linear<T> where T: Flatten {
-    fn record_cb<F>(&self, cb: F) where F: FnOnce() -> Option<T>  {
+impl<T> Histogram<T> for Linear<T>
+where
+    T: Flatten,
+{
+    fn record_cb<F>(&self, cb: F)
+    where
+        F: FnOnce() -> Option<T>,
+    {
         self.back_end.raw_record_cb(cb);
     }
 }
 
-impl<T> Linear<T> where T: Flatten {
+impl<T> Linear<T>
+where
+    T: Flatten,
+{
     ///
     /// Create a new Linear histogram with a given name.
     ///
@@ -284,18 +305,14 @@ impl<T> Linear<T> where T: Flatten {
 }
 
 struct LinearStorage {
-    values: Vec<u32>,// We cannot use an array here, as this would make the struct unsized.
+    values: Vec<u32>, // We cannot use an array here, as this would make the struct unsized.
     shape: LinearBuckets,
 }
-
 
 impl LinearStorage {
     fn new(shape: LinearBuckets) -> LinearStorage {
         let vec = vec_with_size(shape.buckets, 0);
-        LinearStorage {
-            values: vec,
-            shape: shape,
-        }
+        LinearStorage { values: vec, shape }
     }
 }
 
@@ -310,11 +327,14 @@ impl PlainRawStorage for LinearStorage {
     }
 }
 
-impl<T> Clone for Linear<T> where T: Flatten {
+impl<T> Clone for Linear<T>
+where
+    T: Flatten,
+{
     fn clone(&self) -> Self {
         Linear {
             witness: PhantomData,
-            back_end: self.back_end.clone()
+            back_end: self.back_end.clone(),
         }
     }
 }
@@ -339,7 +359,7 @@ pub struct Count {
 
 // The storage, owned by the Telemetry Task.
 struct CountStorage {
-    value: u32
+    value: u32,
 }
 
 impl PlainRawStorage for CountStorage {
@@ -348,19 +368,19 @@ impl PlainRawStorage for CountStorage {
     }
     fn to_json(&self, format: &SerializationFormat) -> Json {
         match format {
-            &SerializationFormat::SimpleJson => {
-                Json::I64(self.value as i64)
-            }
+            SerializationFormat::SimpleJson => Json::I64(self.value as i64),
         }
     }
 }
 
 impl Histogram<u32> for Count {
-    fn record_cb<F>(&self, cb: F) where F: FnOnce() -> Option<u32>  {
+    fn record_cb<F>(&self, cb: F)
+    where
+        F: FnOnce() -> Option<u32>,
+    {
         self.back_end.raw_record_cb(cb);
     }
 }
-
 
 impl Count {
     ///
@@ -382,8 +402,6 @@ impl Count {
     }
 }
 
-
-
 ///
 ///
 /// Enumerated histograms.
@@ -397,14 +415,17 @@ impl Count {
 /// With `SerializationFormat::SimpleJson`, these histograms are
 /// serialized as an array of numbers, in the order of enum values.
 ///
-pub struct Enum<K> where K: Flatten {
+pub struct Enum<K>
+where
+    K: Flatten,
+{
     witness: PhantomData<K>,
     back_end: BackEnd<Plain>,
 }
 
 // The storage, owned by the Telemetry Task.
 struct EnumStorage {
-    values: Vec<u32>
+    values: Vec<u32>,
 }
 
 impl PlainRawStorage for EnumStorage {
@@ -414,21 +435,29 @@ impl PlainRawStorage for EnumStorage {
     }
     fn to_json(&self, format: &SerializationFormat) -> Json {
         match format {
-            &SerializationFormat::SimpleJson => {
+            SerializationFormat::SimpleJson => {
                 Json::Array(self.values.iter().map(|&x| Json::I64(x as i64)).collect())
             }
         }
     }
 }
 
-impl<K> Histogram<K> for Enum<K> where K: Flatten {
-    fn record_cb<F>(&self, cb: F) where F: FnOnce() -> Option<K>  {
+impl<K> Histogram<K> for Enum<K>
+where
+    K: Flatten,
+{
+    fn record_cb<F>(&self, cb: F)
+    where
+        F: FnOnce() -> Option<K>,
+    {
         self.back_end.raw_record_cb(cb);
     }
 }
 
-
-impl<K> Enum<K> where K: Flatten {
+impl<K> Enum<K>
+where
+    K: Flatten,
+{
     ///
     /// Create a new Enum histogram with a given name.
     ///
@@ -449,11 +478,14 @@ impl<K> Enum<K> where K: Flatten {
     }
 }
 
-impl<K> Clone for Enum<K> where K: Flatten {
+impl<K> Clone for Enum<K>
+where
+    K: Flatten,
+{
     fn clone(&self) -> Self {
         Enum {
             witness: PhantomData,
-            back_end: self.back_end.clone()
+            back_end: self.back_end.clone(),
         }
     }
 }

@@ -2,8 +2,6 @@
 ///! Misc stuff used throughout the crate.
 ///!
 
-use std::ptr;
-
 ///
 /// A storage with a name attached.
 ///
@@ -87,11 +85,7 @@ impl LinearBuckets {
         assert!(min < max);
         assert!(buckets > 0);
         assert!(buckets < (max - min) as usize);
-        LinearBuckets {
-            min: min,
-            max: max,
-            buckets: buckets
-        }
+        LinearBuckets { min, max, buckets }
     }
 
     pub fn get_bucket(&self, value: u32) -> usize {
@@ -109,7 +103,8 @@ impl LinearBuckets {
 }
 
 pub fn vec_with_size<T>(size: usize, value: T) -> Vec<T>
-    where T: Clone
+where
+    T: Clone,
 {
     let mut vec = Vec::with_capacity(size);
     vec.resize(size, value);
