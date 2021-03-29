@@ -1,41 +1,41 @@
 //! A simple example demonstrating how to use Telemetry to measure and
 //! store performance data, then eventually dump it to console/disk.
 
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, convert::TryInto};
 use std::fs::File;
 use std::io::Write;
 use std::sync::mpsc::channel;
 use std::thread;
+use std::time::Duration;
 
 extern crate rustc_serialize;
 use rustc_serialize::json::Json;
 
-extern crate time;
-
 extern crate telemetry;
 use telemetry::plain::*;
 
+extern crate time;
+
 // A stopwatch for microsecond precision.
 struct StopwatchUS {
-    pub value: time::Duration,
+    pub value: Duration,
 }
 impl StopwatchUS {
     fn span<F>(f: F) -> StopwatchUS
     where
         F: FnOnce(),
     {
+        let (duration, _) = time::Duration::time_fn(f);
         StopwatchUS {
-            value: time::Duration::span(f),
+            value: duration.try_into().unwrap(),
         }
     }
 }
 impl telemetry::Flatten for StopwatchUS {
     fn as_u32(&self) -> u32 {
-        match self.value.num_microseconds() {
-            Some(x) if x >= std::u32::MAX as i64 => std::u32::MAX,
-            Some(x) if x <= 0 => 0,
-            Some(x) => x as u32,
-            None => std::u32::MAX,
+        match self.value.as_micros() {
+            x if x >= std::u32::MAX as u128 => std::u32::MAX,
+            x => x as u32,
         }
     }
 }

@@ -98,11 +98,11 @@ impl TelemetryTask {
                     self.keyed.insert(index, storage);
                 }
                 Op::RecordPlain(index, value) => {
-                    let storage = self.plain.get_mut(&index).unwrap();
+                    let storage = self.plain.get_mut(index).unwrap();
                     storage.contents.store(value);
                 }
                 Op::RecordKeyed(index, key, value) => {
-                    let storage = self.keyed.get_mut(&index).unwrap();
+                    let storage = self.keyed.get_mut(index).unwrap();
                     storage.contents.store(key, value);
                 }
                 Op::Serialize(what, format, sender) => {
