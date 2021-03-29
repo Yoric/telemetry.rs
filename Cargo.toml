@@ -1,6 +1,6 @@
 [package]
 name = "telemetry"
-version = "0.1.2"
+version = "0.1.3"
 authors = ["David Rajchenbach-Teller <D.O.Teller@gmail.com>"]
 repository = "https://github.com/Yoric/telemetry.rs"
 description = "Telemetry is a mechanism used to capture metrics in an application, to later store the data locally or upload it to a server for statistical analysis."
