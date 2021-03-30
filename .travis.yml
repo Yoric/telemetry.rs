@@ -3,6 +3,7 @@ rust:
   - stable
   - beta
   - nightly
+script: ./travis-build.sh
 matrix:
   allow_failures:
     - rust: nightly

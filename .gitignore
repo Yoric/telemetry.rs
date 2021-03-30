@@ -1,0 +1,4 @@
+target/
+capi/target/
+examples/capi/telemetry
+examples/capi/telemetry.o
